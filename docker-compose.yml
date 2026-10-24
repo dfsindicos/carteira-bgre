@@ -1,0 +1,67 @@
+# Desenvolvimento local e base para a VPS (deploy/docker-compose.vps.yml ajusta a porta para a VPS).
+# Mesmo modelo do Vistorias e do Action Log: banco próprio, migração num contêiner de uma vez só, app standalone.
+services:
+  db:
+    image: postgres:16-alpine
+    # Volta sozinho depois de um reinício da VPS.
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: bgre
+    volumes:
+      - dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d bgre"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    # VPS de 4 GB compartilhada com outros sistemas da DF: limite por contêiner.
+    mem_limit: 256m
+
+  migrar:
+    build:
+      context: .
+      target: ferramentas
+    environment:
+      DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD:-app}@db:5432/bgre
+      # Dados de demonstração (nomes inventados) só com SEED_DEMO=true; na VPS fica desligado.
+      SEED_DEMO: ${SEED_DEMO:-false}
+    command: sh -c "npx prisma migrate deploy && node prisma/seed.mjs"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: app
+      args:
+        VERSAO: ${VERSAO:-}
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD:-app}@db:5432/bgre?connection_limit=5&pool_timeout=10
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      # Sessão e login Microsoft da DF (registro "Carteira BGRE DF" no Entra). Sem eles, ninguém entra.
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      # Segredo das tarefas do cron da VPS (/api/cron/*); ainda sem uso nesta entrega.
+      CRON_SECRET: ${CRON_SECRET:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/saude').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      migrar:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    mem_limit: 384m
+
+volumes:
+  dados:

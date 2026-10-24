@@ -1,0 +1,31 @@
+name: Configurar SSH da VPS
+description: Grava a chave de deploy e a chave do servidor (known_hosts) para os workflows da VPS.
+inputs:
+  chave:
+    description: Chave privada de deploy (segredo VPS_SSH_KEY)
+    required: true
+  known_hosts:
+    description: Linha(s) de known_hosts da VPS (segredo opcional VPS_KNOWN_HOSTS)
+    required: false
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        CHAVE: ${{ inputs.chave }}
+        KNOWN_HOSTS: ${{ inputs.known_hosts }}
+      run: |
+        install -d -m 700 ~/.ssh
+        printf '%s\n' "$CHAVE" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        if [ -n "$KNOWN_HOSTS" ]; then
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+        else
+          # Sem VPS_KNOWN_HOSTS, confia na chave que o servidor apresentar agora. Confira a impressão digital abaixo
+          # com a do painel da Hostinger e grave a linha no segredo VPS_KNOWN_HOSTS para fechar essa brecha.
+          ssh-keyscan -t ed25519 "$VPS_HOST" 2>/dev/null > ~/.ssh/known_hosts
+          echo "::warning::VPS_KNOWN_HOSTS não definido. Chave apresentada pelo servidor: $(ssh-keygen -lf ~/.ssh/known_hosts)"
+          echo "Linha para o segredo VPS_KNOWN_HOSTS:"; cat ~/.ssh/known_hosts
+        fi
+        chmod 600 ~/.ssh/known_hosts
+        printf 'Host %s\n  User root\n  IdentitiesOnly yes\n  ServerAliveInterval 30\n  StrictHostKeyChecking yes\n' "$VPS_HOST" > ~/.ssh/config

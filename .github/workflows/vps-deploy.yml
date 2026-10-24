@@ -1,0 +1,71 @@
+# Deploy da Carteira BGRE na VPS da Hostinger. Só por disparo manual (Actions → "VPS: deploy" → Run workflow).
+# Copia a versão, escreve o .env a partir dos segredos, sobe o docker compose, aplica as migrações e confere /api/saude.
+# A VPS já vem preparada pelo deploy do Action Log (Docker, rclone, SSH só por chave); o HTTPS é do Caddy compartilhado
+# (dfsindicos/vps-gestaodfsindicos). Segredos e variáveis em docs/operacao.md.
+# Um deploy por vez na VPS: espere qualquer outro deploy terminar e confira /api/saude de todos antes de disparar este.
+name: "VPS: deploy"
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: vps-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: producao
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Conferir segredos obrigatórios
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          falta=""
+          for n in VPS_HOST VPS_SSH_KEY; do [ -n "${!n}" ] || falta="$falta $n"; done
+          [ -z "$falta" ] || { echo "::error::Faltam os segredos:$falta (ver docs/operacao.md)"; exit 1; }
+
+      - uses: ./.github/actions/ssh-vps
+        with:
+          chave: ${{ secrets.VPS_SSH_KEY }}
+          known_hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+
+      - name: Copiar a versão
+        run: |
+          # shellcheck disable=SC2029 # a versão ($GITHUB_SHA) é expandida aqui no runner, de propósito
+          git archive --format=tar.gz HEAD | ssh "root@$VPS_HOST" \
+            "set -e; install -d -m 700 /opt/bgre /opt/bgre/releases; d=/opt/bgre/releases/$GITHUB_SHA; rm -rf \"\$d\"; mkdir -p \"\$d\"; tar -xz -C \"\$d\""
+
+      - name: Escrever o .env do servidor
+        env:
+          MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
+          MICROSOFT_TENANT_ID: ${{ vars.MICROSOFT_TENANT_ID }}
+          MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
+          DOMINIO: ${{ vars.DOMINIO }}
+          BACKUP_DESTINO: ${{ vars.BACKUP_DESTINO }}
+        run: |
+          if [ -n "$DOMINIO" ]; then APP_URL="https://$DOMINIO"; else APP_URL="http://localhost:3004"; fi
+          export RETENCAO_DIAS=14 APP_URL
+          # NOME='valor': aspas simples para o docker compose ler como texto literal (segredo pode ter $ < > espaço).
+          linha() { case "${!1}" in *"'"*) echo "::error::$1 não pode conter aspas simples"; exit 1 ;; esac; printf "%s='%s'\n" "$1" "${!1}"; }
+          # Monta tudo antes: se um valor for inválido, o passo para aqui e o .env do servidor fica como estava.
+          conteudo="$(for n in MICROSOFT_TENANT_ID MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET APP_URL DOMINIO BACKUP_DESTINO RETENCAO_DIAS; do linha "$n"; done)"
+          # Vai pelo stdin do ssh: os segredos não aparecem em linha de comando nem no log.
+          # A senha do banco, o AUTH_SECRET (assinatura da sessão) e o CRON_SECRET nascem no próprio servidor na primeira
+          # vez e ficam lá (/opt/bgre/db-password, auth-secret, cron-secret): três segredos a menos para cadastrar, e
+          # trocar de versão não derruba ninguém. Não apague db-password: o banco já foi criado com essa senha.
+          printf '%s\n' "$conteudo" | ssh "root@$VPS_HOST" 'set -e; umask 077; d=/opt/bgre; cat > $d/.env.novo; [ -s $d/db-password ] || openssl rand -hex 24 > $d/db-password; for s in auth-secret cron-secret; do [ -s $d/$s ] || openssl rand -hex 32 > $d/$s; done; printf "POSTGRES_PASSWORD=%s\nAUTH_SECRET=%s\nCRON_SECRET=%s\n" "$(cat $d/db-password)" "$(cat $d/auth-secret)" "$(cat $d/cron-secret)" >> $d/.env.novo; mv $d/.env.novo $d/.env'
+          echo "URL: $APP_URL · cópia externa do backup: ${BACKUP_DESTINO:-desligada} · login Microsoft: $([ -n "$MICROSOFT_TENANT_ID" ] && [ -n "$MICROSOFT_CLIENT_ID" ] && [ -n "$MICROSOFT_CLIENT_SECRET" ] && echo ligado || echo "desligado (faltam MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID ou MICROSOFT_CLIENT_SECRET)")"
+
+      - name: Subir e conferir a saúde
+        run: |
+          # Trava compartilhada por todos os sistemas da VPS: nunca dois deploys montando imagem ao mesmo tempo.
+          # shellcheck disable=SC2029 # a versão ($GITHUB_SHA) é expandida aqui no runner, de propósito
+          ssh "root@$VPS_HOST" "flock -w 3600 /var/lock/gestao-deploy.lock bash /opt/bgre/releases/$GITHUB_SHA/deploy/subir.sh $GITHUB_SHA"

@@ -1,0 +1,47 @@
+# Backup do banco na VPS sob demanda, teste de restauração e teste da cópia externa (OneDrive). O backup diário já roda
+# pelo cron do servidor às 5h05 de Brasília (8h05 UTC). Só disparo manual: Actions → "VPS: backup" → Run workflow.
+name: "VPS: backup"
+on:
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: "O que fazer"
+        type: choice
+        options:
+          - testar-restauracao
+          - backup-agora
+          - listar-backups
+          - testar-copia-externa
+        default: testar-restauracao
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: producao
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conferir segredos
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: '[ -n "$VPS_HOST" ] && [ -n "$VPS_SSH_KEY" ] || { echo "::error::Faltam VPS_HOST e VPS_SSH_KEY"; exit 1; }'
+      - uses: ./.github/actions/ssh-vps
+        with:
+          chave: ${{ secrets.VPS_SSH_KEY }}
+          known_hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+      - name: Executar
+        env:
+          ACAO: ${{ inputs.acao }}
+        run: |
+          case "$ACAO" in
+            testar-restauracao) ssh "root@$VPS_HOST" /opt/bgre/atual/deploy/testar-restauracao.sh ;;
+            backup-agora) ssh "root@$VPS_HOST" /opt/bgre/atual/deploy/backup.sh ;;
+            listar-backups) ssh "root@$VPS_HOST" 'ls -lh /var/backups/bgre; /opt/bgre/atual/deploy/copia-externa.sh listar || true; tail -n 20 /var/log/bgre/backup.log 2>/dev/null || true' ;;
+            # Envia um arquivo de teste para BACKUP_DESTINO (OneDrive), lista a pasta e apaga o teste.
+            testar-copia-externa) ssh "root@$VPS_HOST" /opt/bgre/atual/deploy/copia-externa.sh testar ;;
+          esac

@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/* Padrão visual da DF Síndicos: azul-marinho, dourado e Calibri, com modo escuro derivado da marca.
+   Tokens do protótipo da Carteira BGRE aprovado pelo usuário em 2026-10-24. */
+@theme {
+  --color-fundo: var(--fundo);
+  --color-superficie: var(--superficie);
+  --color-superficie-2: var(--superficie-2);
+  --color-borda: var(--borda);
+  --color-texto: var(--texto);
+  --color-suave: var(--suave);
+  --color-marca: var(--marca);
+  --color-marca-suave: var(--marca-suave);
+  --color-marca-texto: var(--marca-texto);
+  --color-ouro: var(--ouro);
+  --color-ouro-suave: var(--ouro-suave);
+  --color-erro: var(--erro);
+  --color-erro-suave: var(--erro-suave);
+  --color-atencao: var(--atencao);
+  --color-atencao-suave: var(--atencao-suave);
+  --color-ok: var(--ok);
+  --color-ok-suave: var(--ok-suave);
+  --color-info: var(--info);
+  --color-info-suave: var(--info-suave);
+  --color-titulo: var(--titulo);
+  --font-sans: Calibri, Carlito, "Segoe UI", Arial, sans-serif;
+}
+
+:root {
+  --fundo: #eef1f5;
+  --superficie: #ffffff;
+  --superficie-2: #f3f5f8;
+  --borda: #d6dce6;
+  --texto: #14223a;
+  --suave: #5b677b;
+  --marca: #0f2a4a;
+  --marca-suave: #e6ebf2;
+  --marca-texto: #ffffff;
+  --titulo: #0f2a4a;
+  --ouro: #b8913a;
+  --ouro-suave: #f6eedb;
+  --ok: #1f7a4d;
+  --ok-suave: #e2f2e9;
+  --atencao: #a8650b;
+  --atencao-suave: #fbf0dc;
+  --erro: #b42318;
+  --erro-suave: #fbe6e4;
+  --info: #2457a6;
+  --info-suave: #e4ecf8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #0c1420;
+    --superficie: #141f31;
+    --superficie-2: #1a2840;
+    --borda: #2a3850;
+    --texto: #e7ecf4;
+    --suave: #9aa7ba;
+    --marca: #1d3d66;
+    --marca-suave: #22324b;
+    --marca-texto: #ffffff;
+    --titulo: #e7ecf4;
+    --ouro: #d9b25f;
+    --ouro-suave: #33290f;
+    --ok: #5cc58c;
+    --ok-suave: #16301f;
+    --atencao: #e8a94a;
+    --atencao-suave: #382910;
+    --erro: #f08479;
+    --erro-suave: #3b1917;
+    --info: #8fb4ee;
+    --info-suave: #192841;
+    color-scheme: dark;
+  }
+}
+
+body {
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3 {
+  color: var(--titulo);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ouro);
+  outline-offset: 2px;
+}

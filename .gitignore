@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+dist/
+*.local
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tsbuildinfo
+.worktrees/
+.superpowers/
+coverage/
+/dados

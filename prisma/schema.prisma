@@ -1,0 +1,81 @@
+// Modelo da Carteira BGRE (1ª entrega: cadastro e avaliação trimestral do Score Card da Brookfield).
+// Os itens do Score Card não são tabela: são fixos, em src/lib/scorecard.ts. NotaItem guarda só o código ("2.2.1").
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Administradora {
+  id          String       @id @default(cuid())
+  nome        String       @unique
+  // E-mails que vão receber o pedido de evidências (2ª entrega), separados por vírgula ou linha.
+  emails      String       @default("")
+  condominios Condominio[]
+  criadoEm    DateTime     @default(now())
+}
+
+model Condominio {
+  id               String         @id @default(cuid())
+  nome             String         @unique
+  administradoraId String
+  administradora   Administradora @relation(fields: [administradoraId], references: [id])
+  // Sem exclusão: quem sai da carteira fica inativo, e o histórico das avaliações continua.
+  ativo            Boolean        @default(true)
+  avaliacoes       Avaliacao[]
+  criadoEm         DateTime       @default(now())
+
+  @@index([administradoraId])
+}
+
+enum StatusAvaliacao {
+  RASCUNHO
+  // Entregue à BGRE: bloqueia a edição até alguém reabrir.
+  ENTREGUE
+}
+
+model Avaliacao {
+  id           String          @id @default(cuid())
+  condominioId String
+  condominio   Condominio      @relation(fields: [condominioId], references: [id])
+  ano          Int
+  trimestre    Int
+  status       StatusAvaliacao @default(RASCUNHO)
+  entregaAte   DateTime?       @db.Date
+  entregueEm   DateTime?
+  notas        NotaItem[]
+  criadoEm     DateTime        @default(now())
+  atualizadoEm DateTime        @updatedAt
+
+  @@unique([condominioId, ano, trimestre])
+  @@index([ano, trimestre])
+}
+
+model NotaItem {
+  id          String    @id @default(cuid())
+  avaliacaoId String
+  avaliacao   Avaliacao @relation(fields: [avaliacaoId], references: [id], onDelete: Cascade)
+  // Código do item do Score Card, como "2.2.1".
+  item        String
+  nota        Decimal?  @db.Decimal(5, 2)
+  comentario  String    @default("")
+
+  @@unique([avaliacaoId, item])
+}
+
+// Toda alteração feita pelas telas, com quem fez (e-mail da conta Microsoft) e quando.
+model LogAlteracao {
+  id         String   @id @default(cuid())
+  entidade   String
+  entidadeId String
+  campo      String
+  antes      String?
+  depois     String?
+  email      String
+  em         DateTime @default(now())
+
+  @@index([entidade, entidadeId])
+}

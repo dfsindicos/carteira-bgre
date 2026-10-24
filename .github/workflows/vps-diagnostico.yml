@@ -1,0 +1,39 @@
+# Diagnóstico da VPS sob demanda, SÓ LEITURA (não reinicia nada, não muda nada): estado e reinícios dos contêineres,
+# falta de memória, conexões do banco e o log do app sobre erros. Actions → "VPS: diagnóstico" → Run workflow.
+name: "VPS: diagnóstico"
+on:
+  workflow_dispatch:
+    inputs:
+      horas:
+        description: "Quantas horas de log do app olhar"
+        type: string
+        default: "6"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: producao
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conferir segredos
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: '[ -n "$VPS_HOST" ] && [ -n "$VPS_SSH_KEY" ] || { echo "::error::Faltam VPS_HOST e VPS_SSH_KEY"; exit 1; }'
+      - uses: ./.github/actions/ssh-vps
+        with:
+          chave: ${{ secrets.VPS_SSH_KEY }}
+          known_hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+      - name: Diagnosticar
+        env:
+          HORAS: ${{ inputs.horas }}
+        run: |
+          [[ "$HORAS" =~ ^[0-9]{1,3}$ ]] || { echo "::error::horas deve ser um número"; exit 1; }
+          # O script vai pelo stdin: roda a versão deste commit, mesmo que a instalada no servidor seja mais antiga.
+          # shellcheck disable=SC2029 # HORAS (já validado como número) é expandido aqui no runner, de propósito
+          ssh "root@$VPS_HOST" "bash -s $HORAS" < deploy/diagnostico.sh

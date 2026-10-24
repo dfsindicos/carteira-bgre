@@ -1,0 +1,7 @@
+# Ajustes da VPS sobre o docker-compose.yml (usado por deploy/subir.sh).
+services:
+  app:
+    # Só escuta dentro da máquina, na porta 3004 (3000 Action Log, 3001 Vistorias, 3002 Aprovações, 3003 Boletim). Quem
+    # fala com a internet é o Caddy compartilhado do dfsindicos/vps-gestaodfsindicos, que encaminha bgre.gestaodfsindicos.tech para cá.
+    ports: !override
+      - "127.0.0.1:3004:3000"
