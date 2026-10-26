@@ -140,4 +140,32 @@ describe("importação do JSON com notas (itens)", () => {
     const d = (await carregarAvaliacao(condominioId, { ano: 2026, trimestre: 2 }, "SINDICANCIA"))!.avaliacao!;
     expect(Object.keys(d.notas)).toHaveLength(13);
   });
+
+  it("cria os prédios do cadastro que faltam (e a administradora), só ao importar; o que já existe não muda", async () => {
+    const entrada = {
+      cadastro: [
+        { nome: "Torre Teste", administradora: "Outra Adm", avaliadoDesde: "1T25" },
+        { nome: "Parque Novo (demo)", administradora: "Adm Nova Demo", avaliadoDesde: "1T26" },
+      ],
+      avaliacoes: [avaliacao({ condominio: "Parque Novo (demo)" })],
+    };
+    const sim = await importarJson(EMAIL, entrada, {});
+    if ("erro" in sim) throw new Error(sim.erro);
+    expect(sim.prediosNovos).toEqual(["Parque Novo (demo)"]);
+    expect(sim.linhas[0]?.acao).toBe("nova");
+    expect(await prisma.condominio.count({ where: { nome: "Parque Novo (demo)" } })).toBe(0);
+
+    const r = await importarJson(EMAIL, entrada, { gravar: true });
+    if ("erro" in r) throw new Error(r.erro);
+    const c = await prisma.condominio.findFirstOrThrow({ where: { nome: "Parque Novo (demo)" }, include: { administradora: true } });
+    expect([c.administradora.nome, c.avaliadoDesdeAno, c.avaliadoDesdeTrimestre]).toEqual(["Adm Nova Demo", 2026, 1]);
+    expect(r.linhas[0]?.acao).toBe("nova");
+    expect(await prisma.administradora.count({ where: { nome: "Outra Adm" } })).toBe(0);
+    expect(await prisma.logAlteracao.count({ where: { entidadeId: c.id, campo: "criado pela importação" } })).toBe(1);
+
+    const de_novo = await importarJson(EMAIL, entrada, { gravar: true });
+    if ("erro" in de_novo) throw new Error(de_novo.erro);
+    expect(de_novo.prediosNovos).toEqual([]);
+    expect(await prisma.condominio.count({ where: { nome: "Parque Novo (demo)" } })).toBe(1);
+  });
 });

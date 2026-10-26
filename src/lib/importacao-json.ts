@@ -2,7 +2,7 @@ import { z } from "zod";
 import { prisma } from "./db";
 import { aplicarPassos, dataSP, registrar, type NumeroPasso, type Tx } from "./avaliacoes";
 import { gravarNotas, normalizar } from "./importacao";
-import { MODELOS, TIPOS, calcular, formatarNota, formatarPeriodo, prazoPadrao, type Notas, type Tipo } from "./scorecard";
+import { MODELOS, TIPOS, calcular, formatarNota, formatarPeriodo, lerPeriodo, prazoPadrao, type Notas, type Tipo } from "./scorecard";
 
 // Importação do JSON do artefato "Checklist Avaliações BGRE": checklist (4 passos com data), andamento e estimativa e,
 // quando vierem "itens", também as notas e os comentários (os .zip do OneDrive ficaram grandes demais para a tela).
@@ -27,7 +27,16 @@ const esquemaAvaliacao = z.object({
   notaFinalPlanilha: nota.nullable().optional(),
   arquivo: z.string().max(200).nullable().optional(),
 });
-export const esquemaJson = z.object({ avaliacoes: z.array(esquemaAvaliacao).max(2000, "No máximo 2.000 avaliações por arquivo.") });
+// Prédios que a importação cria se ainda não existirem (pedido do usuário de 2026-10-26: cadastrar junto com as notas).
+const esquemaPredio = z.object({
+  nome: z.string().trim().min(2).max(120),
+  administradora: z.string().trim().min(2).max(120),
+  avaliadoDesde: z.string().trim().refine((t) => !!lerPeriodo(t), "“avaliadoDesde” no formato 1T26.").nullable().optional(),
+});
+export const esquemaJson = z.object({
+  cadastro: z.array(esquemaPredio).max(200).optional(),
+  avaliacoes: z.array(esquemaAvaliacao).max(2000, "No máximo 2.000 avaliações por arquivo."),
+});
 export type EntradaJson = z.infer<typeof esquemaAvaliacao>;
 
 /** Nome para casar com o cadastro: sem acento, caixa, pontuação e o texto entre parênteses ("Torre (CTN)" = "torre"). */
@@ -146,6 +155,28 @@ export async function importarJson(
     const i = v.error.issues[0];
     return { erro: `JSON fora do formato${i?.path.length ? ` em ${i.path.join(".")}` : ""}: ${i?.message ?? "inválido"}.` };
   }
+  // Prédios do "cadastro" que ainda não existem: criados (com a administradora, se faltar) antes das avaliações; na
+  // simulação só são listados, e as avaliações deles aparecem como "nova".
+  const existentes = await prisma.condominio.findMany({ select: { nome: true } });
+  const jaTem = new Set(existentes.map((c) => normalizarNome(c.nome)));
+  const novos = (v.data.cadastro ?? []).filter((p, i, l) => !jaTem.has(normalizarNome(p.nome)) && l.findIndex((q) => normalizarNome(q.nome) === normalizarNome(p.nome)) === i);
+  if (gravar)
+    for (const p of novos)
+      await prisma.$transaction(async (tx) => {
+        const adms = await tx.administradora.findMany({ select: { id: true, nome: true } });
+        let adm = adms.find((a) => normalizarNome(a.nome) === normalizarNome(p.administradora));
+        if (!adm) {
+          adm = await tx.administradora.create({ data: { nome: p.administradora, emails: "" } });
+          await registrar(tx, email, "Administradora", adm.id, "criada pela importação", null, p.administradora);
+        }
+        const desde = p.avaliadoDesde ? lerPeriodo(p.avaliadoDesde) : null;
+        const c = await tx.condominio.create({
+          data: { nome: p.nome, administradoraId: adm.id, ativo: true, avaliadoDesdeAno: desde?.ano ?? null, avaliadoDesdeTrimestre: desde?.trimestre ?? null },
+        });
+        await registrar(tx, email, "Condominio", c.id, "criado pela importação", null, `${p.nome} · ${adm.nome}${desde ? ` · desde ${formatarPeriodo(desde)}` : ""}`);
+      });
+  const aCriar = gravar ? new Set<string>() : new Set(novos.map((p) => normalizarNome(p.nome)));
+
   const condominios = await prisma.condominio.findMany({ select: { id: true, nome: true }, orderBy: { nome: "asc" } });
   const porNome = new Map(condominios.map((c) => [normalizarNome(c.nome), c]));
   const linhas: LinhaJson[] = [];
@@ -155,6 +186,10 @@ export async function importarJson(
     const linha: LinhaJson = { indice, tipo: e.tipo, condominio: e.condominio, chave, periodo: formatarPeriodo(e), acao: "escolher", mudancas: [], avisos: [] };
     const escolha = escolhas[chave];
     const c = porNome.get(chave) ?? condominios.find((x) => x.id === escolha);
+    if (!c && aCriar.has(chave)) {
+      linhas.push({ ...linha, condominioNome: e.condominio, acao: "nova", mudancas: ["prédio novo, criado pela importação"] });
+      continue;
+    }
     if (!c) {
       const sugestao = candidato(e.condominio, condominios);
       if (sugestao) linha.candidato = sugestao;
@@ -185,6 +220,6 @@ export async function importarJson(
     }
     linhas.push(linha);
   }
-  return { linhas, condominios, temNotas: v.data.avaliacoes.some((e) => !!e.itens) };
+  return { linhas, condominios, temNotas: v.data.avaliacoes.some((e) => !!e.itens), prediosNovos: novos.map((p) => p.nome) };
 }
 

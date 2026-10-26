@@ -13,7 +13,7 @@ const ACAO: Record<LinhaJson["acao"], [string, string]> = {
 };
 const TIPO = { ADMINISTRADORA: "Administradora", SINDICANCIA: "Sindicância" };
 
-type Resultado = { modo: "simular" | "importar"; linhas: LinhaJson[]; condominios: { id: string; nome: string }[]; temNotas: boolean };
+type Resultado = { modo: "simular" | "importar"; linhas: LinhaJson[]; condominios: { id: string; nome: string }[]; temNotas: boolean; prediosNovos?: string[] };
 
 /**
  * Importar o JSON do artefato "Checklist Avaliações BGRE": checklist, andamento, estimativa e, com "itens", as notas.
@@ -122,6 +122,11 @@ export function ImportarJson() {
             {conta("escolher")} sem condomínio, {conta("ignorada")} ignoradas, {conta("erro")} com erro.
             {resultado.temNotas ? " O arquivo traz notas." : " O arquivo traz só checklist, andamento e estimativa."}
           </p>
+          {!!resultado.prediosNovos?.length && (
+            <p className="text-[14px]">
+              <b>{resultado.modo === "simular" ? "Prédios que serão cadastrados" : "Prédios cadastrados"}:</b> {resultado.prediosNovos.join(", ")}.
+            </p>
+          )}
           <ul className="grid gap-2">
             {linhas.map((l) => {
               const [texto, cor] = ACAO[l.acao];
