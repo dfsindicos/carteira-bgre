@@ -17,6 +17,7 @@ Idioma de trabalho: **português do Brasil** — chat, código de domínio, comm
 
 ## Ordem das entregas
 1. **Feita (2026-10-24):** esqueleto, cadastro, avaliação trimestral com Score Card, painel e "Gerar planilha BGRE". Itens de fonte "Action Log" digitados à mão.
+   - **Importar (2026-10-26):** tela `/importar` que lê as planilhas do Score Card no modelo da Brookfield (.xlsx ou .zip), simula e grava as avaliações já entregues (`src/lib/importacao.ts`, rota `/api/importar`; ver `docs/operacao.md`).
 2. Evidências do mês: pedido automático por e-mail às administradoras (`Administradora.emails`) no 1º dia útil, cobrança de quem atrasa, a DF marca o recebimento e anexa o arquivo, que vai ao SharePoint pela Graph ligado ao item do Score Card (fila no disco e reenvio, como as fotos do Vistorias).
 3. Flash Report gravado pela rotina de segunda; os itens do Action Log (2.2.1, 2.2.3, 2.4, 3.1) preenchidos automaticamente.
 
