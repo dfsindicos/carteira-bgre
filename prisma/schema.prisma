@@ -29,7 +29,7 @@ model Condominio {
   avaliadoDesdeAno       Int?
   avaliadoDesdeTrimestre Int?
   avaliacoes       Avaliacao[]
-  // Identificador do prédio no Flash Report ("jkb"): liga os dados da rotina ao cadastro.
+  // Identificador do prédio no Flash Report ("torre-norte"): liga os dados da rotina ao cadastro.
   flashSlug        String?        @unique
   flashSemanas     FlashSemana[]
   criadoEm         DateTime       @default(now())
