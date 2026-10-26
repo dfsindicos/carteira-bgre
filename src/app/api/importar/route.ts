@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { importarPlanilhas, type Arquivo } from "@/lib/importacao";
+import { mesmaOrigem } from "@/lib/origem";
 import { sessaoAtual } from "@/lib/sessao";
 
 export const dynamic = "force-dynamic";
@@ -18,13 +19,7 @@ export async function POST(req: Request) {
   } catch {
     return responder({ erro: "Entre com a conta Microsoft da DF." }, 401);
   }
-  const origem = req.headers.get("origin");
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  let mesmaOrigem = false;
-  try {
-    mesmaOrigem = !!origem && !!host && new URL(origem).host === host;
-  } catch {}
-  if (!mesmaOrigem) return responder({ erro: "Origem não permitida." }, 403);
+  if (!mesmaOrigem(req)) return responder({ erro: "Origem não permitida." }, 403);
   if (!(req.headers.get("content-type") ?? "").startsWith("multipart/form-data")) return responder({ erro: "Envie o formulário com os arquivos." }, 415);
   const tamanho = Number(req.headers.get("content-length"));
   if (!tamanho || tamanho > LIMITE_ENVIO) return responder({ erro: "Envio maior que 100 MB: divida em partes." }, 413);

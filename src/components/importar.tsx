@@ -134,10 +134,10 @@ export function Importar() {
               <li key={i} className="grid gap-1 border border-borda bg-superficie px-3 py-2.5 text-[14px]">
                 <b className="break-all">{l.arquivo}</b>
                 <span>
-                  <Novo nome={l.predio} novo={l.predioNovo} /> · <Novo nome={l.administradora} novo={l.administradoraNova} a /> · {l.periodo ?? "—"}
+                  <Novo nome={l.predio} novo={l.predioNovo} /> · <Novo nome={l.administradora ?? (l.tipo === "SINDICANCIA" ? "DF Síndicos" : undefined)} novo={l.administradoraNova} a /> · {l.periodo ?? "—"}
                 </span>
                 <span className="tabular-nums">
-                  {l.lidas} de 16 notas · planilha {formatarNota(l.finalPlanilha)} · sistema {formatarNota(l.finalCalculada)}
+                  {l.tipo === "SINDICANCIA" ? "Sindicância · " : ""}{l.lidas} de {l.total} notas · planilha {formatarNota(l.finalPlanilha)} · sistema {formatarNota(l.finalCalculada)}
                 </span>
                 <Acao l={l} />
                 <Avisos l={l} />
@@ -148,7 +148,7 @@ export function Importar() {
           <table className="hidden w-full border-collapse border border-borda bg-superficie text-[13.5px] md:table">
             <thead className="bg-marca text-left text-marca-texto">
               <tr>
-                {["Arquivo", "Prédio", "Administradora", "Trimestre", "Notas", "Final (planilha · sistema)", "O que acontece", "Avisos"].map((t) => (
+                {["Arquivo", "Prédio", "Contratada", "Trimestre", "Notas", "Final (planilha · sistema)", "O que acontece", "Avisos"].map((t) => (
                   <th key={t} className="px-2 py-1.5 font-bold">
                     {t}
                   </th>
@@ -163,10 +163,13 @@ export function Importar() {
                     <Novo nome={l.predio} novo={l.predioNovo} />
                   </td>
                   <td className="px-2 py-1.5">
-                    <Novo nome={l.administradora} novo={l.administradoraNova} a />
+                    <Novo nome={l.administradora ?? (l.tipo === "SINDICANCIA" ? "DF Síndicos" : undefined)} novo={l.administradoraNova} a />
                   </td>
                   <td className="px-2 py-1.5">{l.periodo ?? "—"}</td>
-                  <td className="px-2 py-1.5 whitespace-nowrap tabular-nums">{l.lidas} de 16</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap tabular-nums">
+                    {l.lidas} de {l.total}
+                    {l.tipo === "SINDICANCIA" && <span className="block text-[12px] text-suave">Sindicância</span>}
+                  </td>
                   <td className="px-2 py-1.5 whitespace-nowrap tabular-nums">
                     {formatarNota(l.finalPlanilha)} · {formatarNota(l.finalCalculada)}
                   </td>

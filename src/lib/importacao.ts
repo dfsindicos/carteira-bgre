@@ -1,10 +1,11 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import { prisma } from "./db";
-import { CODIGOS, calcular, formatarNota, formatarPeriodo, prazoPadrao, type Notas, type Periodo } from "./scorecard";
+import { MODELOS, calcular, formatarNota, formatarPeriodo, prazoPadrao, type Notas, type Periodo, type Tipo } from "./scorecard";
 
-// Importação das avaliações já entregues à BGRE, a partir das planilhas do modelo oficial da Brookfield (uma por prédio
-// e trimestre). A tela simula (sem gravar) e depois importa os mesmos arquivos; nada é guardado em disco.
+// Importação das avaliações já entregues à BGRE, a partir das planilhas do modelo oficial da Brookfield (uma por prédio,
+// trimestre e tipo: Administradora ou Sindicância). A tela simula (sem gravar) e depois importa os mesmos arquivos; nada
+// é guardado em disco. A importação do JSON do checklist fica em src/lib/importacao-json.ts.
 
 export const LIMITES = { planilhas: 200, xlsx: 5 * 1024 * 1024, zip: 60 * 1024 * 1024 };
 
@@ -12,6 +13,7 @@ export type Arquivo = { nome: string; bytes: Uint8Array };
 
 export type Lida = {
   arquivo: string;
+  tipo: Tipo;
   erro?: string;
   predio?: string;
   administradora?: string;
@@ -24,6 +26,7 @@ export type Lida = {
 
 export type Linha = {
   arquivo: string;
+  tipo?: Tipo;
   erro?: string;
   predio?: string;
   predioNovo?: boolean;
@@ -31,6 +34,8 @@ export type Linha = {
   administradoraNova?: boolean;
   periodo?: string;
   lidas: number;
+  /** Itens do Score Card do tipo (16 ou 13). */
+  total: number;
   finalPlanilha: number | null;
   finalCalculada: number | null;
   avisos: string[];
@@ -73,7 +78,7 @@ export function periodoDoTexto(t: string): { trimestre: number | null; ano: numb
   };
 }
 
-/** "JKB - 2T26 - ….xlsx", "CTN - Q226 - …", "PL Extrema - Q2-26 - …". */
+/** "TD - 2T26 - ….xlsx", "TD - Q226 - …", "Torre Demo - Q2-26 - …". */
 export function periodoDoNome(nome: string): Periodo | null {
   const m = /(?:^|[^a-z0-9])([1-4])T(\d{2})(?![0-9])/i.exec(nome) ?? /(?:^|[^a-z0-9])Q([1-4])-?(\d{2})(?![0-9])/i.exec(nome);
   return m ? { trimestre: Number(m[1]), ano: 2000 + Number(m[2]) } : null;
@@ -91,7 +96,7 @@ function nota(v: unknown): number | null {
 }
 
 export async function lerPlanilha(arquivo: string, bytes: Uint8Array): Promise<Lida> {
-  const lida: Lida = { arquivo, notas: {}, comentarios: {}, finalPlanilha: null, avisos: [] };
+  const lida: Lida = { arquivo, tipo: "ADMINISTRADORA", notas: {}, comentarios: {}, finalPlanilha: null, avisos: [] };
   const falha = (erro: string) => ({ ...lida, erro });
   const wb = new ExcelJS.Workbook();
   try {
@@ -113,7 +118,7 @@ export async function lerPlanilha(arquivo: string, bytes: Uint8Array): Promise<L
   };
   const folhas = wb.worksheets;
   const ws =
-    folhas.find((w) => normalizar(w.name) === "score card") ?? folhas.find((w) => celulas(w).some((c) => c.n === "avaliacao final"));
+    folhas.find((w) => normalizar(w.name).startsWith("score card")) ?? folhas.find((w) => celulas(w).some((c) => c.n === "avaliacao final"));
   if (!ws) return falha('Não achei a aba "Score Card" (nem uma aba com "AVALIAÇÃO FINAL").');
   const cs = celulas(ws);
 
@@ -125,10 +130,19 @@ export async function lerPlanilha(arquivo: string, bytes: Uint8Array): Promise<L
     if (depois) return depois;
     return cs.find((x) => x.linha === c.linha && x.coluna > c.coluna && x.t !== c.t)?.t ?? "";
   };
-  lida.administradora = campo("contratada") || undefined;
-  lida.predio = campo("local de prestacao") || undefined;
-  if (!lida.predio) return falha('Não achei o "Local de Prestação".');
-  if (!lida.administradora) return falha('Não achei a "Contratada".');
+  // Sindicância: título "…Performance de Sindicância…" ou rótulo "Empreendimento"; a da Administradora usa "Local de Prestação".
+  const sindicancia = cs.some((c) => c.n.includes("performance de sindicancia")) || (cs.some((c) => c.n.startsWith("empreendimento")) && !cs.some((c) => c.n.startsWith("local de prestacao")));
+  if (sindicancia) {
+    lida.tipo = "SINDICANCIA";
+    lida.predio = campo("empreendimento") || undefined;
+    if (!lida.predio) return falha('Não achei o "Empreendimento".');
+  } else {
+    lida.administradora = campo("contratada") || undefined;
+    lida.predio = campo("local de prestacao") || undefined;
+    if (!lida.predio) return falha('Não achei o "Local de Prestação".');
+    if (!lida.administradora) return falha('Não achei a "Contratada".');
+  }
+  const codigos = MODELOS[lida.tipo].codigos;
 
   const doTexto = periodoDoTexto(campo("periodo avaliado"));
   const doNome = periodoDoNome(arquivo);
@@ -139,10 +153,11 @@ export async function lerPlanilha(arquivo: string, bytes: Uint8Array): Promise<L
   if (doNome && formatarPeriodo(doNome) !== formatarPeriodo(lida.periodo))
     lida.avisos.push(`O nome do arquivo diz ${formatarPeriodo(doNome)}; vale o período da planilha, ${formatarPeriodo(lida.periodo)}.`);
 
-  // Cabeçalho da tabela: a linha que tem "#", "Peso" e "Comentário".
-  const cab = cs.find((c) => c.t === "#" && ["peso", "comentario"].every((r) => cs.some((x) => x.linha === c.linha && x.n === r)));
+  // Cabeçalho da tabela: a linha que tem "#", "Peso" e "Comentário" (ou "Comentários", na da Sindicância).
+  const rotuloCab = (x: Celula, r: string) => (r === "peso" ? x.n === r : x.n === "comentario" || x.n === "comentarios");
+  const cab = cs.find((c) => c.t === "#" && ["peso", "comentario"].every((r) => cs.some((x) => x.linha === c.linha && rotuloCab(x, r))));
   if (!cab) return falha('Não achei o cabeçalho da tabela (# | Peso | Comentário).');
-  const col = (r: string) => cs.find((x) => x.linha === cab.linha && x.n === r)!.coluna;
+  const col = (r: string) => cs.find((x) => x.linha === cab.linha && rotuloCab(x, r))!.coluna;
   const [cNota, cComentario] = [col("peso"), col("comentario")];
   const fim = cs.find((c) => c.linha > cab.linha && c.n === "avaliacao final");
   const naLinha = (linha: number, coluna: number) => cs.find((x) => x.linha === linha && x.coluna === coluna);
@@ -150,13 +165,13 @@ export async function lerPlanilha(arquivo: string, bytes: Uint8Array): Promise<L
   const vistos = new Set<string>();
   for (const c of cs.filter((x) => x.coluna === cab.coluna && x.linha > cab.linha && (!fim || x.linha < fim.linha))) {
     const codigo = c.t.replace(/,/g, ".");
-    if (!/^\d+(\.\d+)+$/.test(codigo) || codigo === "2.2") continue;
+    if (!/^\d+(\.\d+)+$/.test(codigo) || (!sindicancia && codigo === "2.2")) continue;
     const v = naLinha(c.linha, cNota)?.v;
-    if (codigo === "3.5") {
+    if (!sindicancia && codigo === "3.5") {
       if (nota(v) !== null) lida.avisos.push("3.5 ignorado (não entra no Score Card).");
       continue;
     }
-    if (!CODIGOS.includes(codigo)) {
+    if (!codigos.includes(codigo)) {
       lida.avisos.push(`Item ${codigo} não existe no Score Card: ignorado.`);
       continue;
     }
@@ -171,7 +186,7 @@ export async function lerPlanilha(arquivo: string, bytes: Uint8Array): Promise<L
     const comentario = naLinha(c.linha, cComentario)?.t ?? "";
     if (comentario) lida.comentarios[codigo] = comentario.slice(0, 2000);
   }
-  const faltam = CODIGOS.filter((c) => !vistos.has(c));
+  const faltam = codigos.filter((c) => !vistos.has(c));
   if (faltam.length) lida.avisos.push(`Itens não encontrados: ${faltam.join(", ")}.`);
 
   if (fim) {
@@ -179,7 +194,7 @@ export async function lerPlanilha(arquivo: string, bytes: Uint8Array): Promise<L
     const numero = typeof v === "number" ? v : cs.find((x) => x.linha === fim.linha && x.coluna > fim.coluna && typeof x.v === "number")?.v;
     lida.finalPlanilha = nota(numero);
   }
-  const calculada = calcular(lida.notas).final;
+  const calculada = calcular(lida.notas, lida.tipo).final;
   if (lida.finalPlanilha !== null && calculada !== null && Math.abs(lida.finalPlanilha - calculada) > 0.1)
     lida.avisos.push(`A planilha diz ${formatarNota(lida.finalPlanilha)}, o sistema calcula ${formatarNota(calculada)}.`);
   return lida;
@@ -192,7 +207,7 @@ export async function abrirArquivos(enviados: Arquivo[]): Promise<{ planilhas: A
   const planilhas: Arquivo[] = [];
   const erros: Linha[] = [];
   const erro = (arquivo: string, msg: string) =>
-    erros.push({ arquivo, erro: msg, lidas: 0, finalPlanilha: null, finalCalculada: null, avisos: [], acao: "erro" });
+    erros.push({ arquivo, erro: msg, lidas: 0, total: 0, finalPlanilha: null, finalCalculada: null, avisos: [], acao: "erro" });
   for (const a of enviados) {
     const ext = a.nome.toLowerCase().split(".").pop();
     if (ext === "xlsx") {
@@ -234,6 +249,10 @@ export async function abrirArquivos(enviados: Arquivo[]): Promise<{ planilhas: A
 
 type Db = Pick<typeof prisma, "condominio" | "administradora" | "avaliacao">;
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+type Existente = { id: string; notas: { item: string; nota: unknown; comentario: string }[] };
+
+/** Avaliação "com notas": alguma nota ou comentário. A criada vazia (só checklist, pelo JSON) recebe as notas sem "Substituir". */
+export const temNotas = (a: Existente | null) => !!a && a.notas.some((n) => n.nota !== null || n.comentario !== "");
 
 // shortcut: acha pelo nome normalizado lendo o cadastro inteiro (dezenas de linhas); com milhares, guardar o nome normalizado.
 async function acharPorNome<T extends { nome: string }>(lista: Promise<T[]>, nome: string) {
@@ -241,29 +260,32 @@ async function acharPorNome<T extends { nome: string }>(lista: Promise<T[]>, nom
   return (await lista).find((x) => normalizar(x.nome) === n) ?? null;
 }
 
-async function situacao(db: Db, l: Lida) {
-  const condominio = await acharPorNome(db.condominio.findMany({ include: { administradora: true } }), l.predio!);
-  const administradora = condominio ? condominio.administradora : await acharPorNome(db.administradora.findMany(), l.administradora!);
-  const existente = condominio
-    ? await db.avaliacao.findUnique({ where: { condominioId_ano_trimestre: { condominioId: condominio.id, ...l.periodo! } }, include: { notas: true } })
-    : null;
-  return { condominio, administradora, existente };
-}
+export type Conteudo = { tipo: Tipo; periodo: Periodo; notas: Notas; comentarios: Record<string, string>; origem: string };
 
-async function gravar(tx: Tx, email: string, l: Lida, substituir: boolean): Promise<Linha["resultado"]> {
-  const { condominio, administradora, existente } = await situacao(tx, l);
-  const p = l.periodo!;
-  const origem = `${formatarPeriodo(p)} · ${l.arquivo}`;
-  const log = (entidade: string, entidadeId: string, campo: string, antes: string | null, depois: string | null) =>
-    tx.logAlteracao.create({ data: { email, entidade, entidadeId, campo, antes, depois } });
+/**
+ * Grava as notas e os comentários de uma avaliação (planilha .xlsx ou JSON). Nova: cria com as notas (entregue = passo 4
+ * marcado agora). Existente sem notas: preenche. Existente com notas: pula, ou troca com "substituir" (o checklist fica
+ * como estava). Tudo com LogAlteracao.
+ */
+export async function gravarNotas(
+  tx: Tx,
+  email: string,
+  condominioId: string,
+  c: Conteudo,
+  existente: Existente | null,
+  { substituir, entregue }: { substituir: boolean; entregue: boolean },
+): Promise<NonNullable<Linha["resultado"]>> {
+  const codigos = MODELOS[c.tipo].codigos;
+  const log = (entidadeId: string, campo: string, antes: string | null, depois: string | null) =>
+    tx.logAlteracao.create({ data: { email, entidade: "Avaliacao", entidadeId, campo, antes, depois } });
 
-  if (existente && !substituir) return "pulada";
+  if (existente && temNotas(existente) && !substituir) return "pulada";
   if (existente) {
     let mudou = false;
-    for (const item of CODIGOS) {
+    for (const item of codigos) {
       const atual = existente.notas.find((n) => n.item === item);
       const antes = { nota: atual?.nota == null ? null : Number(atual.nota), comentario: atual?.comentario ?? "" };
-      const depois = { nota: l.notas[item] ?? null, comentario: l.comentarios[item] ?? "" };
+      const depois = { nota: c.notas[item] ?? null, comentario: c.comentarios[item] ?? "" };
       if (antes.nota === depois.nota && antes.comentario === depois.comentario) continue;
       mudou = true;
       await tx.notaItem.upsert({
@@ -271,47 +293,72 @@ async function gravar(tx: Tx, email: string, l: Lida, substituir: boolean): Prom
         create: { avaliacaoId: existente.id, item, ...depois },
         update: depois,
       });
-      if (antes.nota !== depois.nota) await log("Avaliacao", existente.id, `${item} nota`, antes.nota?.toString() ?? null, depois.nota?.toString() ?? null);
-      if (antes.comentario !== depois.comentario) await log("Avaliacao", existente.id, `${item} comentário`, antes.comentario, depois.comentario);
+      if (antes.nota !== depois.nota) await log(existente.id, `${item} nota`, antes.nota?.toString() ?? null, depois.nota?.toString() ?? null);
+      if (antes.comentario !== depois.comentario) await log(existente.id, `${item} comentário`, antes.comentario, depois.comentario);
     }
     if (!mudou) return "sem mudança";
     await tx.avaliacao.update({ where: { id: existente.id }, data: { atualizadoEm: new Date() } });
-    await log("Avaliacao", existente.id, "substituída pela importação", null, origem);
-    return "substituída";
+    const preenchida = !temNotas(existente);
+    await log(existente.id, preenchida ? "notas importadas" : "substituída pela importação", null, c.origem);
+    return preenchida ? "importada" : "substituída";
   }
 
-  let condominioId = condominio?.id;
-  if (!condominioId) {
-    let administradoraId = administradora?.id;
-    if (!administradoraId) {
-      administradoraId = (await tx.administradora.create({ data: { nome: l.administradora! } })).id;
-      await log("Administradora", administradoraId, "criada pela importação", null, `${l.administradora} · ${l.arquivo}`);
-    }
-    condominioId = (await tx.condominio.create({ data: { nome: l.predio!, administradoraId } })).id;
-    await log("Condominio", condominioId, "criado pela importação", null, `${l.predio} · ${l.arquivo}`);
-  }
   const a = await tx.avaliacao.create({
     data: {
       condominioId,
-      ...p,
-      status: "ENTREGUE",
-      entregaAte: prazoPadrao(p),
+      ...c.periodo,
+      tipo: c.tipo,
+      entregaAte: prazoPadrao(c.periodo),
+      ...(entregue ? { status: "ENTREGUE" as const, entregueEm: new Date(), passo4Por: email } : {}),
       notas: {
-        create: CODIGOS.filter((c) => c in l.notas || c in l.comentarios).map((item) => ({
+        create: codigos.filter((k) => k in c.notas || k in c.comentarios).map((item) => ({
           item,
-          nota: l.notas[item] ?? null,
-          comentario: l.comentarios[item] ?? "",
+          nota: c.notas[item] ?? null,
+          comentario: c.comentarios[item] ?? "",
         })),
       },
     },
   });
-  await log("Avaliacao", a.id, "importada", null, origem);
+  await log(a.id, "importada", null, c.origem);
   return "importada";
+}
+
+const buscarExistente = (db: Db, condominioId: string, p: Periodo, tipo: Tipo) =>
+  db.avaliacao.findUnique({ where: { condominioId_ano_trimestre_tipo: { condominioId, ...p, tipo } }, include: { notas: true } });
+
+async function situacao(db: Db, l: Lida) {
+  const condominio = await acharPorNome(db.condominio.findMany({ include: { administradora: true } }), l.predio!);
+  const administradora =
+    condominio ? condominio.administradora : l.administradora ? await acharPorNome(db.administradora.findMany(), l.administradora) : null;
+  const existente = condominio ? await buscarExistente(db, condominio.id, l.periodo!, l.tipo) : null;
+  return { condominio, administradora, existente };
+}
+
+async function gravar(tx: Tx, email: string, l: Lida, substituir: boolean): Promise<Linha["resultado"]> {
+  const { condominio, administradora, existente } = await situacao(tx, l);
+  const log = (entidade: string, entidadeId: string, campo: string, depois: string) =>
+    tx.logAlteracao.create({ data: { email, entidade, entidadeId, campo, antes: null, depois } });
+
+  let condominioId = condominio?.id;
+  if (!condominioId) {
+    // A Sindicância não traz administradora: o prédio precisa existir (a simulação já marcou como erro).
+    if (l.tipo === "SINDICANCIA") throw new Error("Prédio da Sindicância não cadastrado.");
+    let administradoraId = administradora?.id;
+    if (!administradoraId) {
+      administradoraId = (await tx.administradora.create({ data: { nome: l.administradora! } })).id;
+      await log("Administradora", administradoraId, "criada pela importação", `${l.administradora} · ${l.arquivo}`);
+    }
+    condominioId = (await tx.condominio.create({ data: { nome: l.predio!, administradoraId } })).id;
+    await log("Condominio", condominioId, "criado pela importação", `${l.predio} · ${l.arquivo}`);
+  }
+  const origem = `${formatarPeriodo(l.periodo!)}${l.tipo === "SINDICANCIA" ? " Sindicância" : ""} · ${l.arquivo}`;
+  return gravarNotas(tx, email, condominioId, { ...l, periodo: l.periodo!, origem }, existente, { substituir, entregue: true });
 }
 
 /**
  * Lê os arquivos e diz o que vai acontecer com cada um (gravar = false) ou grava (gravar = true), um arquivo por
- * transação: um arquivo com erro não impede os outros. Sem "substituir", avaliação que já existe é pulada.
+ * transação: um arquivo com erro não impede os outros. Sem "substituir", avaliação que já tem notas é pulada. As da
+ * Administradora vão antes, para que o prédio criado por uma delas sirva à Sindicância do mesmo envio.
  */
 export async function importarPlanilhas(email: string, enviados: Arquivo[], { substituir, gravar: deVerdade }: { substituir: boolean; gravar: boolean }) {
   const abertos = await abrirArquivos(enviados);
@@ -320,16 +367,21 @@ export async function importarPlanilhas(email: string, enviados: Arquivo[], { su
   // Na simulação, o que um arquivo anterior do mesmo envio vai criar conta como existente para os seguintes.
   const planejados = { predios: new Map<string, string>(), adms: new Set<string>(), avaliacoes: new Set<string>() };
 
-  for (const a of abertos.planilhas) {
-    const l = await lerPlanilha(a.nome, a.bytes);
+  const lidas: Lida[] = [];
+  for (const a of abertos.planilhas) lidas.push(await lerPlanilha(a.nome, a.bytes));
+  lidas.sort((x, y) => (x.tipo === y.tipo ? 0 : x.tipo === "ADMINISTRADORA" ? -1 : 1));
+
+  for (const l of lidas) {
     const base: Linha = {
       arquivo: l.arquivo,
+      tipo: l.tipo,
       predio: l.predio,
       administradora: l.administradora,
       periodo: l.periodo && formatarPeriodo(l.periodo),
       lidas: Object.values(l.notas).filter((n) => typeof n === "number").length,
+      total: MODELOS[l.tipo].codigos.length,
       finalPlanilha: l.finalPlanilha,
-      finalCalculada: calcular(l.notas).final,
+      finalCalculada: calcular(l.notas, l.tipo).final,
       avisos: l.avisos,
       acao: "erro",
     };
@@ -339,20 +391,24 @@ export async function importarPlanilhas(email: string, enviados: Arquivo[], { su
     }
     const s = await situacao(prisma, l);
     const chavePredio = normalizar(l.predio!);
-    const chave = `${chavePredio} ${base.periodo}`;
-    const existe = !!s.existente || planejados.avaliacoes.has(chave);
+    if (l.tipo === "SINDICANCIA" && !s.condominio && !planejados.predios.has(chavePredio)) {
+      linhas.push({ ...base, erro: "Prédio não cadastrado: importe antes a planilha da Administradora ou cadastre o prédio." });
+      continue;
+    }
+    const chave = `${l.tipo} ${chavePredio} ${base.periodo}`;
+    const existe = temNotas(s.existente) || planejados.avaliacoes.has(chave);
     const admDoCadastro = s.condominio?.administradora.nome ?? planejados.predios.get(chavePredio);
     const linha: Linha = {
       ...base,
       predioNovo: !s.condominio && !planejados.predios.has(chavePredio),
-      administradoraNova: !admDoCadastro && !s.administradora && !planejados.adms.has(normalizar(l.administradora!)),
+      administradoraNova: !!l.administradora && !admDoCadastro && !s.administradora && !planejados.adms.has(normalizar(l.administradora)),
       acao: existe ? (substituir ? "substituir" : "pular") : "nova",
     };
-    if (admDoCadastro && normalizar(admDoCadastro) !== normalizar(l.administradora!))
+    if (l.administradora && admDoCadastro && normalizar(admDoCadastro) !== normalizar(l.administradora))
       linha.avisos = [...linha.avisos, `No cadastro, a administradora do prédio é ${admDoCadastro}.`];
     if (existe && !substituir) linha.avisos = [...linha.avisos, "Já existe: pulada (marque “Substituir” para trocar)."];
-    planejados.predios.set(chavePredio, admDoCadastro ?? l.administradora!);
-    planejados.adms.add(normalizar(l.administradora!));
+    planejados.predios.set(chavePredio, admDoCadastro ?? l.administradora ?? "");
+    if (l.administradora) planejados.adms.add(normalizar(l.administradora));
     planejados.avaliacoes.add(chave);
 
     if (deVerdade) {

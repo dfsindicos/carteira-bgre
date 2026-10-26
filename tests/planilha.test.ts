@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import { planilhaBgre } from "@/lib/planilha";
-import { CODIGOS, calcular } from "@/lib/scorecard";
+import { CODIGOS, MODELOS, calcular } from "@/lib/scorecard";
 
 describe("planilha BGRE", () => {
   it("abre no exceljs com cabeçalho, itens, comentários e a nota final", async () => {
@@ -32,5 +32,20 @@ describe("planilha BGRE", () => {
     const linhaFinal = valores.find((l) => l.includes("AVALIAÇÃO FINAL"))!;
     expect(linhaFinal[4]).toBeCloseTo(final / 100, 9);
     expect(linhaFinal[5]).toBe(calcular(notas).classificacao);
+  });
+
+  it("gera a da Sindicância com o título, a DF como contratada e os 13 itens", async () => {
+    const notas = Object.fromEntries(MODELOS.SINDICANCIA.codigos.map((c) => [c, 95]));
+    const arquivo = await planilhaBgre({ tipo: "SINDICANCIA", condominio: "Torre Teste", contratada: "DF Síndicos", periodo: { ano: 2026, trimestre: 2 }, status: "ENTREGUE", notas, comentarios: {} });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(arquivo as unknown as ArrayBuffer);
+    const valores: unknown[][] = [];
+    wb.worksheets[0]!.eachRow((r) => valores.push((r.values as unknown[]).slice(1)));
+    const plano = valores.flat();
+    expect(plano).toContain(MODELOS.SINDICANCIA.titulo);
+    expect(plano).toContain("DF Síndicos");
+    expect(plano).toContain("3.8");
+    expect(plano).not.toContain("2.2.1");
+    expect(valores.find((l) => l.includes("AVALIAÇÃO FINAL"))![4]).toBeCloseTo(0.95, 9);
   });
 });

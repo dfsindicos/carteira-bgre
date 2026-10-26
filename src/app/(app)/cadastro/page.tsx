@@ -1,6 +1,7 @@
 import { acaoSalvarAdministradora, acaoSalvarCondominio } from "@/app/acoes";
 import { FormularioLinha } from "@/components/formulario-linha";
 import { listarCadastro } from "@/lib/cadastro";
+import { formatarPeriodo } from "@/lib/scorecard";
 
 const campo = "w-full border border-borda bg-superficie px-2 py-1.5 text-[14px] text-texto";
 const rotulo = "grid min-w-0 gap-0.5 text-[12px] text-suave";
@@ -22,7 +23,8 @@ export default async function Cadastro() {
     </>
   );
 
-  const camposCond = (c?: { id: string; nome: string; administradoraId: string; ativo: boolean }) => (
+  type Cond = { id: string; nome: string; administradoraId: string; ativo: boolean; avaliadoDesdeAno: number | null; avaliadoDesdeTrimestre: number | null };
+  const camposCond = (c?: Cond) => (
     <>
       {c && <input type="hidden" name="id" value={c.id} />}
       <label className={`${rotulo} flex-[2] basis-56`}>
@@ -41,6 +43,17 @@ export default async function Cadastro() {
             </option>
           ))}
         </select>
+      </label>
+      <label className={`${rotulo} w-28`}>
+        Avaliado desde
+        <input
+          name="avaliadoDesde"
+          placeholder="1T25"
+          pattern="[1-4][Tt][0-9]{2}"
+          title="Trimestre no formato 1T26"
+          defaultValue={c?.avaliadoDesdeAno && c.avaliadoDesdeTrimestre ? formatarPeriodo({ ano: c.avaliadoDesdeAno, trimestre: c.avaliadoDesdeTrimestre }) : ""}
+          className={campo}
+        />
       </label>
       <label className="flex items-center gap-1.5 py-1.5 text-[14px]">
         <input type="checkbox" name="ativo" defaultChecked={c?.ativo ?? true} className="size-4" />
@@ -74,7 +87,10 @@ export default async function Cadastro() {
 
       <section className="grid gap-2">
         <h2 className="text-lg font-bold">Condomínios</h2>
-        <p className="text-[13px] text-suave">Não há exclusão: quem sai da carteira fica inativo e o histórico das avaliações continua.</p>
+        <p className="text-[13px] text-suave">
+          Não há exclusão: quem sai da carteira fica inativo e o histórico das avaliações continua. “Avaliado desde” é o primeiro trimestre avaliado
+          pela BGRE (vazio = desde o 1T25); os anteriores aparecem como fora do período no mapa.
+        </p>
         <ul className="grid gap-2">
           {condominios.map((c) => (
             <li key={c.id} className={`border border-borda px-3 py-2.5 ${c.ativo ? "bg-superficie" : "bg-superficie-2"}`}>

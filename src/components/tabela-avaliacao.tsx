@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 import { acaoSalvarCampo } from "@/app/acoes";
 import { Ponto } from "@/components/classificacao";
-import { ESCALA, FONTES, GRUPOS, calcular, classificar, esquemaNota, formatarNota, type Fonte, type Notas } from "@/lib/scorecard";
+import { ESCALA, FONTES, MODELOS, calcular, classificar, esquemaNota, formatarNota, type Fonte, type Notas, type Tipo } from "@/lib/scorecard";
 
 const COR_FONTE: Record<Fonte, string> = {
   al: "bg-info-suave text-info",
@@ -21,16 +21,19 @@ const textoNota = (v: number | null | undefined) => (typeof v === "number" ? Str
  * enquanto se digita, com a mesma conta do servidor (src/lib/scorecard.ts).
  */
 export function TabelaAvaliacao({
+  tipo,
   avaliacaoId,
   notas,
   comentarios,
   bloqueada,
 }: {
+  tipo: Tipo;
   avaliacaoId: string;
   notas: Notas;
   comentarios: Record<string, string>;
   bloqueada: boolean;
 }) {
+  const GRUPOS = MODELOS[tipo].grupos;
   const [valores, setValores] = useState<Record<string, string>>(() =>
     Object.fromEntries(GRUPOS.flatMap((g) => g.itens).flatMap((i) => [[chave(i.codigo, "nota"), textoNota(notas[i.codigo])], [chave(i.codigo, "comentario"), comentarios[i.codigo] ?? ""]])),
   );
@@ -43,7 +46,7 @@ export function TabelaAvaliacao({
       const n = esquemaNota.safeParse(valores[chave(i.codigo, "nota")] ?? "");
       atuais[i.codigo] = n.success ? n.data : null;
     }
-  const r = calcular(atuais);
+  const r = calcular(atuais, tipo);
 
   async function salvar(item: string, campo: "nota" | "comentario") {
     const k = chave(item, campo);

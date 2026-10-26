@@ -4,7 +4,7 @@ import JSZip from "jszip";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { importarPlanilhas, lerPlanilha, periodoDoNome, periodoDoTexto, type Arquivo } from "@/lib/importacao";
-import { CODIGOS, calcular } from "@/lib/scorecard";
+import { CODIGOS, MODELOS, calcular } from "@/lib/scorecard";
 import { limparECriar } from "./dados";
 
 const EMAIL = "pessoa@exemplo.test";
@@ -232,3 +232,88 @@ describe("importação", () => {
     expect(await prisma.avaliacao.count()).toBe(1);
   });
 });
+
+/**
+ * Planilha sintética no layout da Sindicância (Rev. 3): aba "Score Card Set.21", "Empreendimento:" com o valor na célula
+ * seguinte, "Periodo avaliado:" com o valor duas células depois, cabeçalho com "Comentários", linhas "Resultado:".
+ */
+async function planilhaSindicancia(o: { predio?: string; periodo?: string; notas?: Record<string, number | null>; comentarios?: Record<string, string>; titulo?: boolean } = {}) {
+  const codigos = MODELOS.SINDICANCIA.codigos;
+  const notas: Record<string, number | null> = { ...Object.fromEntries(codigos.map((c, i) => [c, (91 + (i % 8)) / 100])), ...o.notas };
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Score Card Set.21");
+  if (o.titulo !== false) ws.getCell("C3").value = "Avaliação dos Indicadores de Performance de Sindicância - Rev. 3 (Fevereiro 2024)";
+  ws.getCell("C5").value = "Contratada: DF Sindicos";
+  ws.getCell("C6").value = "Empreendimento:";
+  ws.getCell("D6").value = o.predio ?? "Torre Teste";
+  ws.getCell("C7").value = "Periodo avaliado:";
+  ws.getCell("E7").value = o.periodo ?? "abr, mai e jun/26";
+  ["Item", "#", "Descrição", "Peso", null, null, null, "Comentários"].forEach((t, i) => (ws.getCell(9, 3 + i).value = t));
+  let linha = 10;
+  for (const g of MODELOS.SINDICANCIA.grupos) {
+    ws.getCell(linha++, 3).value = g.nome;
+    for (const it of g.itens) {
+      ws.getCell(linha, 4).value = it.codigo;
+      ws.getCell(linha, 5).value = it.descricao;
+      const v = notas[it.codigo];
+      if (typeof v === "number") ws.getCell(linha, 6).value = { formula: `AVERAGE(G${linha}:I${linha})`, result: v };
+      if (o.comentarios?.[it.codigo]) ws.getCell(linha, 10).value = o.comentarios[it.codigo];
+      linha++;
+    }
+    ws.getCell(linha, 5).value = "Resultado:";
+    ws.getCell(linha++, 6).value = 0.9;
+  }
+  const final = calcular(Object.fromEntries(Object.entries(notas).map(([c, v]) => [c, v === null ? null : v * 100])), "SINDICANCIA").final;
+  ws.getCell(linha, 3).value = "AVALIAÇÃO FINAL";
+  ws.getCell(linha, 6).value = { formula: "SUM(X1:X2)", result: final === null ? 0 : final / 100 };
+  return new Uint8Array(await wb.xlsx.writeBuffer());
+}
+
+describe("planilha da Sindicância", () => {
+  it("reconhece pelo título e lê Empreendimento, Periodo (duas células depois), Comentários e os 13 itens", async () => {
+    const l = await lerPlanilha("x.xlsx", await planilhaSindicancia({ notas: { "3.8": 0.75 }, comentarios: { "3.4": "nota da administradora" } }));
+    expect(l.erro).toBeUndefined();
+    expect(l.tipo).toBe("SINDICANCIA");
+    expect(l.predio).toBe("Torre Teste");
+    expect(l.administradora).toBeUndefined();
+    expect(l.periodo).toEqual({ ano: 2026, trimestre: 2 });
+    expect(Object.keys(l.notas)).toEqual(MODELOS.SINDICANCIA.codigos);
+    expect(l.notas["3.8"]).toBe(75);
+    expect(l.comentarios["3.4"]).toBe("nota da administradora");
+    expect(l.avisos).toEqual([]);
+    expect(l.finalPlanilha).toBeCloseTo(calcular(l.notas, "SINDICANCIA").final!, 1);
+  });
+
+  it("reconhece pelo rótulo Empreendimento quando não há título", async () => {
+    expect((await lerPlanilha("x.xlsx", await planilhaSindicancia({ titulo: false }))).tipo).toBe("SINDICANCIA");
+    expect((await lerPlanilha("x.xlsx", await planilha())).tipo).toBe("ADMINISTRADORA");
+  });
+
+  it("importa as duas no mesmo envio (a da Administradora antes) e não mistura com a da Administradora", async () => {
+    const envio = [
+      { nome: "Sin - 2T26.xlsx", bytes: await planilhaSindicancia({ predio: "Torre Nova" }) },
+      await arq("TN - 2T26.xlsx", { predio: "Torre Nova" }),
+    ];
+    const s = await linhas(simular(envio));
+    expect(s.map((x) => [x.tipo, x.acao, x.lidas, x.total])).toEqual([
+      ["ADMINISTRADORA", "nova", 16, 16],
+      ["SINDICANCIA", "nova", 13, 13],
+    ]);
+    const r = await linhas(importar(envio));
+    expect(r.map((x) => x.resultado)).toEqual(["importada", "importada"]);
+    const avs = await prisma.avaliacao.findMany({ include: { notas: true }, orderBy: { tipo: "asc" } });
+    expect(avs.map((a) => [a.tipo, a.notas.length, a.status, !!a.entregueEm])).toEqual([
+      ["ADMINISTRADORA", 16, "ENTREGUE", true],
+      ["SINDICANCIA", 13, "ENTREGUE", true],
+    ]);
+    // Reimportar pula as duas.
+    expect((await linhas(importar(envio))).map((x) => x.resultado)).toEqual(["pulada", "pulada"]);
+  });
+
+  it("Sindicância de prédio que não existe é erro (não cria prédio sem administradora)", async () => {
+    const l = await linhas(importar([{ nome: "Sin.xlsx", bytes: await planilhaSindicancia({ predio: "Prédio Desconhecido" }) }]));
+    expect(l[0]).toMatchObject({ acao: "erro", erro: expect.stringMatching(/Prédio não cadastrado/) });
+    expect(await prisma.avaliacao.count()).toBe(0);
+  });
+});
+
