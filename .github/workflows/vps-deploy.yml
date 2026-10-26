@@ -46,6 +46,8 @@ jobs:
       - name: Escrever o .env do servidor
         env:
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
+          # Senha da rotina do Flash Report (/api/integracao/flash); sem ela o endereço responde 503.
+          FLASH_TOKEN: ${{ secrets.FLASH_TOKEN }}
           MICROSOFT_TENANT_ID: ${{ vars.MICROSOFT_TENANT_ID }}
           MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
           DOMINIO: ${{ vars.DOMINIO }}
@@ -56,7 +58,7 @@ jobs:
           # NOME='valor': aspas simples para o docker compose ler como texto literal (segredo pode ter $ < > espaço).
           linha() { case "${!1}" in *"'"*) echo "::error::$1 não pode conter aspas simples"; exit 1 ;; esac; printf "%s='%s'\n" "$1" "${!1}"; }
           # Monta tudo antes: se um valor for inválido, o passo para aqui e o .env do servidor fica como estava.
-          conteudo="$(for n in MICROSOFT_TENANT_ID MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET APP_URL DOMINIO BACKUP_DESTINO RETENCAO_DIAS; do linha "$n"; done)"
+          conteudo="$(for n in MICROSOFT_TENANT_ID MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET FLASH_TOKEN APP_URL DOMINIO BACKUP_DESTINO RETENCAO_DIAS; do linha "$n"; done)"
           # Vai pelo stdin do ssh: os segredos não aparecem em linha de comando nem no log.
           # A senha do banco, o AUTH_SECRET (assinatura da sessão) e o CRON_SECRET nascem no próprio servidor na primeira
           # vez e ficam lá (/opt/bgre/db-password, auth-secret, cron-secret): três segredos a menos para cadastrar, e

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const MENU = [
   { href: "/", rotulo: "Painel" },
   { href: "/avaliacao", rotulo: "Avaliação trimestral" },
+  { href: "/flash", rotulo: "Flash Report" },
   { href: "/cadastro", rotulo: "Cadastro" },
   { href: "/importar", rotulo: "Importar" },
 ];
@@ -21,16 +22,20 @@ export function Cabecalho({ nome }: { nome: string }) {
           CARTEIRA BGRE
         </Link>
         <nav aria-label="Menu" className="order-3 flex w-full flex-wrap gap-x-4 gap-y-1 text-[14px] sm:order-none sm:w-auto">
-          {MENU.map((m) => (
-            <Link
-              key={m.href}
-              href={m.href}
-              aria-current={ativo(m.href) ? "page" : undefined}
-              className={`border-b-2 py-1 ${ativo(m.href) ? "border-ouro" : "border-transparent opacity-85 hover:opacity-100"}`}
-            >
-              {m.rotulo}
-            </Link>
-          ))}
+          {MENU.map((m) => {
+            // O Flash Report é página estática (public/flash.html): navegação comum, sem o roteador do Next.
+            const L = m.href === "/flash" ? "a" : Link;
+            return (
+              <L
+                key={m.href}
+                href={m.href}
+                aria-current={ativo(m.href) ? "page" : undefined}
+                className={`border-b-2 py-1 ${ativo(m.href) ? "border-ouro" : "border-transparent opacity-85 hover:opacity-100"}`}
+              >
+                {m.rotulo}
+              </L>
+            );
+          })}
         </nav>
         <div className="ml-auto flex items-center gap-2 text-[13px]">
           <span className="hidden max-w-48 truncate opacity-80 md:inline" title={nome}>

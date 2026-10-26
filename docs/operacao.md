@@ -30,6 +30,7 @@ Mesmo modelo do Vistorias e do Action Log: tudo na VPS roda pelo GitHub Actions,
 | `MICROSOFT_CLIENT_ID` | variável | o ID do aplicativo "Carteira BGRE DF" |
 | `DOMINIO` | variável | `bgre.gestaodfsindicos.tech` |
 | `BACKUP_DESTINO` | variável | `onedrive:Backups/bgre` (vazio desliga a cópia externa) |
+| `FLASH_TOKEN` | segredo | senha da rotina do Flash Report (`openssl rand -hex 32`); o mesmo valor vai como variável `FLASH_TOKEN` no ambiente do Claude das rotinas. Vazio desliga `/api/integracao/flash` (503) |
 
 Sem `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` no GitHub: nascem no servidor (acima).
 
@@ -90,3 +91,12 @@ Segunda parte da tela **Importar**, rota `/api/importar/json` (JSON, sessão, me
 - Avaliação que não existe é criada vazia. O passo 4 no JSON marca como entregue **sem exigir as notas** (histórico).
 - Com `itens`: notas (0 a 100, 2 casas) e comentários pelas mesmas regras da importação .xlsx: avaliação sem notas recebe; com notas, é pulada com aviso (o checklist, o andamento e a estimativa entram mesmo assim), ou trocada com "Substituir as notas". Código fora do modelo do tipo: aviso e ignorado. `notaFinalPlanilha` diferente da calculada em mais de 0,1 ponto: aviso. `arquivo` vai para o `LogAlteracao`.
 - "Simular" roda a mesma gravação numa transação desfeita no fim: mostra exatamente o que "Importar" faz. Cada avaliação grava numa transação própria. Reimportar o mesmo arquivo não muda nada. Tudo com `LogAlteracao` do e-mail de quem importou.
+
+## Flash Report semanal
+- **Painel:** `/flash` (menu "Flash Report"), o mesmo HTML do artefato antigo (`public/flash.html`, sem dados), que lê os dados de `/flash/dados.js` (com login). Os textos ficam só no banco (`FlashSemana`, um por prédio e semana; `FlashPainel`, o resto), nunca no repositório.
+- **Formato:** o `DATA` do artefato (`condos`, `weeks`, `entries`, `cobertos`, `exec`, `geradoEm` e `siglas`), validado em `src/lib/flash.ts`. Qualquer tag além de `<b>`, `<i>`, `<p>` e `<br>` vira "‹" na gravação.
+- **Prédios:** ligados pelo `Condominio.flashSlug`; na primeira vez, pelo nome (sem acento, caixa, pontuação e parênteses, ou um contido no outro, se só um bater). Quem não existir é cadastrado **inativo** (fica fora do Score Card; o Cadastro reativa).
+- **Histórico:** tela Importar, seção "Flash Report (JSON)": simular, conferir a ligação dos prédios, importar. Semana já gravada é substituída; reimportar não muda nada.
+- **Rotina (segunda 12h e quarta):** no lugar de ler e republicar o artefato:
+  - ler: `curl -sf -H "Authorization: Bearer $FLASH_TOKEN" https://bgre.gestaodfsindicos.tech/api/integracao/flash > /tmp/dados.json` e `python3 -c 'import json;print("const DATA = "+open("/tmp/dados.json").read()+";")' > /tmp/base.html` (o `build.py` lê a linha `const DATA = `);
+  - gravar: tirar a linha `const DATA = ` do `/tmp/novo.html` e `curl -sf -X POST -H "Authorization: Bearer $FLASH_TOKEN" -H "Content-Type: application/json" --data-binary @/tmp/novo.json https://bgre.gestaodfsindicos.tech/api/integracao/flash`. A resposta traz as semanas novas, atualizadas e sem mudança; 422 diz o campo fora do formato.

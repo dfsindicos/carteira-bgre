@@ -21,6 +21,10 @@ const config: NextConfig = {
   // Imagem enxuta (server.js + dependências mínimas) para o contêiner da VPS.
   output: "standalone",
   poweredByHeader: false,
+  // O painel do Flash Report é o HTML do artefato (public/flash.html), com os dados em /flash/dados.js.
+  async rewrites() {
+    return [{ source: "/flash", destination: "/flash.html" }];
+  },
   async headers() {
     return [
       {
