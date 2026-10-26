@@ -51,6 +51,8 @@ services:
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
       # Segredo das tarefas do cron da VPS (/api/cron/*); ainda sem uso nesta entrega.
       CRON_SECRET: ${CRON_SECRET:-}
+      # Senha da rotina que grava o Flash Report (/api/integracao/flash).
+      FLASH_TOKEN: ${FLASH_TOKEN:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/saude').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
