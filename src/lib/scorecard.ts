@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-// Score Card da Brookfield (planilha 2T26): grupos, pesos, itens e escala. Puro: serve ao servidor, às telas e à planilha.
+// Score Cards da Brookfield: o da Administradora (planilha 2T26) e o da Sindicância (Rev. 3, fevereiro de 2024). Grupos,
+// pesos, itens, escala e o checklist do trimestre. Puro: serve ao servidor, às telas e à planilha.
 
 export type Fonte = "al" | "ev" | "df";
 export const FONTES: Record<Fonte, string> = { al: "Action Log", ev: "Evidência", df: "DF" };
@@ -54,12 +55,100 @@ export const GRUPOS: Grupo[] = [
 export const ITENS: Item[] = GRUPOS.flatMap((g) => g.itens);
 export const CODIGOS = ITENS.map((i) => i.codigo);
 
+/** Score Card da Sindicância: a BGRE avalia a própria DF. Todos os itens são trabalho da DF. */
+export const GRUPOS_SINDICANCIA: Grupo[] = [
+  {
+    nome: "1. Processo de pagamentos",
+    peso: 0.2,
+    itens: [
+      item("1.1", "Plano de contas aprovado, com explicação das variações acima de 5%", "df"),
+      item("1.2", "Análise das pastas financeiras", "df"),
+    ],
+  },
+  {
+    nome: "2. Processo de compras",
+    peso: 0.3,
+    itens: [item("2.1", "Compras dentro do padrão acordado (normativa Brookfield)", "df")],
+  },
+  {
+    nome: "3. Gestão de processos",
+    peso: 0.3,
+    itens: [
+      item("3.1", "Visitas conforme contrato (FUP das atividades, inspeções e reuniões com o conselho)", "df"),
+      item("3.2", "Análise do Relatório Gerencial Mensal (financeiro e operacional)", "df"),
+      item("3.3", "Acompanhamento de procedimentos administrativos e judiciais", "df"),
+      item("3.4", "Avaliação da administradora do período", "df"),
+      item("3.5", "Monitoramento da validade dos documentos e licenças", "df"),
+      item("3.6", "Reunião mensal com a administradora, formalizada em ata", "df"),
+      item("3.7", "Acompanhamento da inserção de documentos nas plataformas (procedimento Brookfield)", "df"),
+      item("3.8", "Acompanhamento dos itens de CAPEX", "df"),
+    ],
+  },
+  {
+    nome: "4. Contratos",
+    peso: 0.2,
+    itens: [
+      item("4.1", "Monitoramento da validade dos contratos", "df"),
+      item("4.2", "Contratações dentro do padrão acordado (normativa Brookfield)", "df"),
+    ],
+  },
+];
+
+export type Tipo = "ADMINISTRADORA" | "SINDICANCIA";
+export const TIPOS: Tipo[] = ["ADMINISTRADORA", "SINDICANCIA"];
+/** Tipo na URL (?tipo=SINDICANCIA); qualquer outra coisa é a Administradora. */
+export const lerTipo = (s: string | null | undefined): Tipo => (s === "SINDICANCIA" ? "SINDICANCIA" : "ADMINISTRADORA");
+
+export type Passo = { titulo: string; descricao: string };
+export type Modelo = { tipo: Tipo; nome: string; titulo: string; grupos: Grupo[]; codigos: string[]; passos: Passo[] };
+
+const modeloDe = (tipo: Tipo, nome: string, titulo: string, grupos: Grupo[], passos: Passo[]): Modelo => ({
+  tipo,
+  nome,
+  titulo,
+  grupos,
+  codigos: grupos.flatMap((g) => g.itens.map((i) => i.codigo)),
+  passos,
+});
+
+const ENVIADA: Passo = { titulo: "Enviada à BGRE e validada", descricao: "Prazo: 1 mês após o fim do trimestre. Marque quando a BGRE confirmar." };
+
+export const MODELOS: Record<Tipo, Modelo> = {
+  ADMINISTRADORA: modeloDe("ADMINISTRADORA", "Avaliação da Administradora", "AVALIAÇÃO TRIMESTRAL DA GERENCIADORA · SCORE CARD", GRUPOS, [
+    {
+      titulo: "Evidências do trimestre reunidas",
+      descricao: "Itens 1.1, 2.3, 2.5, 2.6 e 3.2 recebidos da administradora e guardados na pasta do condomínio.",
+    },
+    {
+      titulo: "Planilha BGRE preenchida",
+      descricao: "Todos os itens digitados; N/A registrado como 100%; período e contratada corretos no cabeçalho.",
+    },
+    {
+      titulo: "Notas conferidas",
+      descricao: "Índice por bloco e SLA total batem com as regras da aba fonte dados_cálculos (SLA < 90% gera retenção).",
+    },
+    ENVIADA,
+  ]),
+  SINDICANCIA: modeloDe("SINDICANCIA", "Avaliação da Sindicância", "AVALIAÇÃO DOS INDICADORES DE PERFORMANCE DE SINDICÂNCIA · SCORE CARD", GRUPOS_SINDICANCIA, [
+    { titulo: "Controle do trimestre reunido", descricao: "Seu controle próprio para os itens 3.3 e 3.4 e demais evidências da sindicância." },
+    { titulo: "Planilha da Sindicância preenchida", descricao: "Todos os itens digitados; o 3.4 traz a avaliação da administradora." },
+    { titulo: "Notas conferidas", descricao: "Pesos 20/30/30/20 e escala conferidos." },
+    ENVIADA,
+  ]),
+};
+
+/** Na Sindicância, a contratada avaliada é a própria DF. */
+export const CONTRATADA_SINDICANCIA = "DF Síndicos";
+
 export type Classificacao = "Excelente" | "Bom" | "Satisfatório" | "Regular" | "Ruim";
 export const ESCALA = "Excelente > 98% · Bom 95–98% · Satisfatório 90–95% · Regular 80–90% · Ruim < 80%";
 
 export function classificar(v: number): Classificacao {
   return v > 98 ? "Excelente" : v >= 95 ? "Bom" : v >= 90 ? "Satisfatório" : v >= 80 ? "Regular" : "Ruim";
 }
+
+/** Faixa da nota no mapa condomínio × trimestre, como no artefato: verde ≥ 90, âmbar 70–89,9, vermelho < 70. */
+export const faixaMapa = (v: number): "ok" | "atencao" | "erro" => (v >= 90 ? "ok" : v >= 70 ? "atencao" : "erro");
 
 /** Cor do ponto da classificação nas telas: verde, âmbar ou vermelho, como no protótipo. */
 export function corDaClassificacao(c: Classificacao): "ok" | "atencao" | "erro" {
@@ -73,22 +162,23 @@ export type Notas = Record<string, number | null | undefined>;
 
 export type Resultado = {
   grupos: { media: number | null; classificacao: Classificacao | null }[];
-  /** Só com os 16 itens com nota; até lá, null e `faltam` diz quantas notas faltam. */
+  /** Só com todos os itens com nota (16 ou 13); até lá, null e `faltam` diz quantas notas faltam. */
   final: number | null;
   classificacao: Classificacao | null;
   faltam: number;
 };
 
 /** Média do grupo = média simples dos itens com nota; final = Σ média do grupo × peso. */
-export function calcular(notas: Notas): Resultado {
+export function calcular(notas: Notas, tipo: Tipo = "ADMINISTRADORA"): Resultado {
+  const modelo = MODELOS[tipo];
   const tem = (c: string) => typeof notas[c] === "number";
-  const grupos = GRUPOS.map((g) => {
+  const grupos = modelo.grupos.map((g) => {
     const valores = g.itens.filter((i) => tem(i.codigo)).map((i) => notas[i.codigo] as number);
     const media = valores.length ? limpar(valores.reduce((s, v) => s + v, 0) / valores.length) : null;
     return { media, classificacao: media === null ? null : classificar(media) };
   });
-  const faltam = CODIGOS.filter((c) => !tem(c)).length;
-  const final = faltam ? null : limpar(GRUPOS.reduce((s, g, i) => s + (grupos[i]!.media as number) * g.peso, 0));
+  const faltam = modelo.codigos.filter((c) => !tem(c)).length;
+  const final = faltam ? null : limpar(modelo.grupos.reduce((s, g, i) => s + (grupos[i]!.media as number) * g.peso, 0));
   return { grupos, final, classificacao: final === null ? null : classificar(final), faltam };
 }
 

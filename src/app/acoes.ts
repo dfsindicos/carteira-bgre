@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { criarAvaliacao, mudarPrazo, mudarStatus, salvarCampo, type Resposta } from "@/lib/avaliacoes";
+import { criarAvaliacao, marcarPassos, mudarPrazo, salvarAcompanhamento, salvarCampo, type NumeroPasso, type Resposta } from "@/lib/avaliacoes";
 import { salvarAdministradora, salvarCondominio } from "@/lib/cadastro";
-import { formatarPeriodo, lerPeriodo } from "@/lib/scorecard";
+import { formatarPeriodo, lerPeriodo, lerTipo } from "@/lib/scorecard";
 import { sessaoAtual } from "@/lib/sessao";
 
 // Server actions: leem quem está usando pela sessão e chamam as regras de src/lib, que validam tudo com Zod.
@@ -17,8 +17,9 @@ export async function acaoCriarAvaliacao(form: FormData) {
   const periodo = lerPeriodo(texto(form, "periodo"));
   const condominioId = z.string().min(1).parse(texto(form, "condominioId"));
   if (!periodo) throw new Error("Período inválido.");
-  await criarAvaliacao(email, condominioId, periodo);
-  redirect(`/avaliacao/${condominioId}/${formatarPeriodo(periodo)}`);
+  const tipo = lerTipo(texto(form, "tipo"));
+  await criarAvaliacao(email, condominioId, periodo, tipo);
+  redirect(`/avaliacao/${condominioId}/${formatarPeriodo(periodo)}?tipo=${tipo}`);
 }
 
 export async function acaoSalvarCampo(entrada: { avaliacaoId: string; item: string; campo: "nota" | "comentario"; valor: string }): Promise<Resposta> {
@@ -28,9 +29,17 @@ export async function acaoSalvarCampo(entrada: { avaliacaoId: string; item: stri
   return r;
 }
 
-export async function acaoStatus(avaliacaoId: string, status: "ENTREGUE" | "RASCUNHO"): Promise<Resposta> {
+/** Checklist: marca ou desmarca passos (o 4 é "Enviada à BGRE": trava as notas). marcarPassos valida com Zod. */
+export async function acaoPassos(avaliacaoId: string, passos: NumeroPasso[], marcado: boolean): Promise<Resposta> {
   const { email } = await sessaoAtual();
-  const r = await mudarStatus(email, z.string().parse(avaliacaoId), z.enum(["ENTREGUE", "RASCUNHO"]).parse(status));
+  const r = await marcarPassos(email, avaliacaoId, passos, marcado);
+  revalidatePath("/", "layout");
+  return r;
+}
+
+export async function acaoAcompanhamento(form: FormData): Promise<Resposta> {
+  const { email } = await sessaoAtual();
+  const r = await salvarAcompanhamento(email, { avaliacaoId: texto(form, "avaliacaoId"), andamento: texto(form, "andamento"), estimativa: texto(form, "estimativa") });
   revalidatePath("/", "layout");
   return r;
 }
@@ -56,6 +65,7 @@ export async function acaoSalvarCondominio(form: FormData): Promise<Resposta> {
     nome: texto(form, "nome"),
     administradoraId: texto(form, "administradoraId"),
     ativo: form.get("ativo") === "on",
+    avaliadoDesde: texto(form, "avaliadoDesde"),
   });
   revalidatePath("/", "layout");
   return r;

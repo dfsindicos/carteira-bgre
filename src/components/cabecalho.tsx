@@ -7,6 +7,7 @@ const MENU = [
   { href: "/", rotulo: "Painel" },
   { href: "/avaliacao", rotulo: "Avaliação trimestral" },
   { href: "/cadastro", rotulo: "Cadastro" },
+  { href: "/importar", rotulo: "Importar" },
 ];
 
 /** Faixa azul-marinho do protótipo: nome do sistema, menu (ativo sublinhado em dourado), volta ao menu de sistemas e sair. */

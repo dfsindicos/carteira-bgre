@@ -13,10 +13,12 @@ Idioma de trabalho: **português do Brasil** — chat, código de domínio, comm
 - **Login Microsoft** da DF. Não existe entrada sem login, nem em desenvolvimento.
 - **Porta de entrada compartilhada:** HTTPS e roteamento no Caddy único do `dfsindicos/vps-gestaodfsindicos`. Este repositório não sobe Caddy próprio.
 - **Domínio:** só `gestaodfsindicos.tech`.
-- Score Card: itens, pesos, escala e regras exatamente como no protótipo (`src/lib/scorecard.ts`). A planilha gerada é provisória até o usuário mandar o modelo oficial da BGRE.
+- Score Card: itens, pesos, escala e regras exatamente como no protótipo (`src/lib/scorecard.ts`); o da Sindicância como na planilha "Rev. 3 (Fevereiro 2024)" da Brookfield. A planilha gerada é provisória até o usuário mandar o modelo oficial da BGRE.
 
 ## Ordem das entregas
 1. **Feita (2026-10-24):** esqueleto, cadastro, avaliação trimestral com Score Card, painel e "Gerar planilha BGRE". Itens de fonte "Action Log" digitados à mão.
+   - **Importar (2026-10-26):** tela `/importar` que lê as planilhas do Score Card no modelo da Brookfield (.xlsx ou .zip), simula e grava as avaliações já entregues (`src/lib/importacao.ts`, rota `/api/importar`; ver `docs/operacao.md`).
+   - **Tudo o que o artefato "Checklist Avaliações BGRE" fazia (2026-10-26):** segundo Score Card, o da **Sindicância** (`Avaliacao.tipo`, abas nas telas, planilha gerada e importação dos dois modelos); **mapa condomínio × trimestre** com indicadores e gráficos (`src/lib/mapa.ts`, página `/avaliacao`) e "avaliado desde" no cadastro; **checklist de 4 passos** por avaliação (o passo 4 é o antigo status Entregue e trava as notas); **andamento e nota estimada**; **importação do JSON** do artefato, com checklist e, opcionalmente, as notas (`src/lib/importacao-json.ts`, `/api/importar/json`). Painel com a nota da Sindicância.
 2. Evidências do mês: pedido automático por e-mail às administradoras (`Administradora.emails`) no 1º dia útil, cobrança de quem atrasa, a DF marca o recebimento e anexa o arquivo, que vai ao SharePoint pela Graph ligado ao item do Score Card (fila no disco e reenvio, como as fotos do Vistorias).
 3. Flash Report gravado pela rotina de segunda; os itens do Action Log (2.2.1, 2.2.3, 2.4, 3.1) preenchidos automaticamente.
 

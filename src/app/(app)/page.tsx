@@ -44,6 +44,7 @@ export default async function Painel() {
               <th className="px-2.5 py-2 max-sm:hidden">Administradora</th>
               <th className="px-2.5 py-2 text-right">Nota {ref ?? ""}</th>
               <th className="px-2.5 py-2 whitespace-nowrap">vs {ant ?? "anterior"}</th>
+              <th className="px-2.5 py-2 text-right">Sindicância</th>
               <th className="px-2.5 py-2 max-sm:hidden">Classificação</th>
             </tr>
           </thead>
@@ -64,6 +65,11 @@ export default async function Painel() {
                 <td className="px-2.5 py-2 whitespace-nowrap tabular-nums">
                   <Diferenca d={l.diferenca} />
                 </td>
+                <td className="px-2.5 py-2 text-right tabular-nums">
+                  <Link href={`/avaliacao/${l.id}/${ref ?? formatarPeriodo(emAvaliacao)}?tipo=SINDICANCIA`} className="hover:underline">
+                    {formatarNota(l.sindicancia)}
+                  </Link>
+                </td>
                 <td className="px-2.5 py-2 max-sm:hidden">
                   <Ponto c={l.nota === null ? null : classificar(l.nota)} />
                 </td>
@@ -71,7 +77,7 @@ export default async function Painel() {
             ))}
             {!p.linhas.length && (
               <tr>
-                <td colSpan={5} className="px-2.5 py-4 text-suave">
+                <td colSpan={6} className="px-2.5 py-4 text-suave">
                   Nenhum condomínio ativo. Comece pelo <Link href="/cadastro" className="text-info underline">Cadastro</Link>.
                 </td>
               </tr>
@@ -79,7 +85,7 @@ export default async function Painel() {
           </tbody>
         </table>
       </div>
-      <p className="text-[13px] text-suave">Os piores primeiro; sem nota final no {ref ?? "trimestre"} fica no topo. Clicar no condomínio abre a avaliação.</p>
+      <p className="text-[13px] text-suave">Os piores primeiro; sem nota final no {ref ?? "trimestre"} fica no topo. Clicar no condomínio abre a avaliação da Administradora; na nota da Sindicância, a da Sindicância do mesmo trimestre.</p>
     </>
   );
 }

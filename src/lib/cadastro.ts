@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import type { Resposta } from "./avaliacoes";
+import { formatarPeriodo, lerPeriodo } from "./scorecard";
 
 // Cadastro de administradoras e condomínios. Sem exclusão: condomínio que sai da carteira fica inativo.
 
@@ -24,7 +25,24 @@ const esquemaCondominio = z.object({
   nome,
   administradoraId: z.string().min(1, "Escolha a administradora."),
   ativo: z.boolean(),
+  // Primeiro trimestre avaliado ("1T26"); vazio = desde o início do mapa.
+  avaliadoDesde: z
+    .string()
+    .trim()
+    .default("")
+    .transform((t, ctx) => {
+      if (!t) return { avaliadoDesdeAno: null, avaliadoDesdeTrimestre: null };
+      const p = lerPeriodo(t);
+      if (!p) {
+        ctx.addIssue({ code: "custom", message: "“Avaliado desde” no formato 1T26." });
+        return z.NEVER;
+      }
+      return { avaliadoDesdeAno: p.ano, avaliadoDesdeTrimestre: p.trimestre };
+    }),
 });
+
+const desdeTexto = (c: { avaliadoDesdeAno: number | null; avaliadoDesdeTrimestre: number | null }) =>
+  c.avaliadoDesdeAno && c.avaliadoDesdeTrimestre ? formatarPeriodo({ ano: c.avaliadoDesdeAno, trimestre: c.avaliadoDesdeTrimestre }) : "";
 
 const duplicado = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 
@@ -51,12 +69,17 @@ export async function salvarAdministradora(email: string, entrada: z.input<typeo
 export async function salvarCondominio(email: string, entrada: z.input<typeof esquemaCondominio>): Promise<Resposta> {
   const e = esquemaCondominio.safeParse(entrada);
   if (!e.success) return { ok: false, erro: e.error.issues[0]?.message ?? "Dados inválidos." };
-  const { id, ...dados } = e.data;
+  const { id, avaliadoDesde, ...resto } = e.data;
+  const dados = { ...resto, ...avaliadoDesde };
   try {
     await prisma.$transaction(async (tx) => {
       const antes = id ? await tx.condominio.findUniqueOrThrow({ where: { id } }) : null;
       const depois = id ? await tx.condominio.update({ where: { id }, data: dados }) : await tx.condominio.create({ data: dados });
       const campos = (["nome", "administradoraId", "ativo"] as const).filter((c) => antes?.[c] !== depois[c]);
+      if ((antes ? desdeTexto(antes) : "") !== desdeTexto(depois))
+        await tx.logAlteracao.create({
+          data: { email, entidade: "Condominio", entidadeId: depois.id, campo: "avaliadoDesde", antes: antes && (desdeTexto(antes) || null), depois: desdeTexto(depois) || null },
+        });
       await tx.logAlteracao.createMany({
         data: campos.map((c) => ({
           email,

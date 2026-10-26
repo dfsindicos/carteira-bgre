@@ -25,15 +25,24 @@ model Condominio {
   administradora   Administradora @relation(fields: [administradoraId], references: [id])
   // Sem exclusão: quem sai da carteira fica inativo, e o histórico das avaliações continua.
   ativo            Boolean        @default(true)
+  // Primeiro trimestre avaliado pela BGRE; os anteriores ficam "fora do período" no mapa. Vazio = desde o início do mapa.
+  avaliadoDesdeAno       Int?
+  avaliadoDesdeTrimestre Int?
   avaliacoes       Avaliacao[]
   criadoEm         DateTime       @default(now())
 
   @@index([administradoraId])
 }
 
+// A BGRE avalia a administradora e a própria DF (sindicância), cada uma com o seu Score Card (src/lib/scorecard.ts).
+enum TipoAvaliacao {
+  ADMINISTRADORA
+  SINDICANCIA
+}
+
 enum StatusAvaliacao {
   RASCUNHO
-  // Entregue à BGRE: bloqueia a edição até alguém reabrir.
+  // Entregue à BGRE = passo 4 do checklist marcado: bloqueia a edição das notas até alguém desmarcar.
   ENTREGUE
 }
 
@@ -43,14 +52,28 @@ model Avaliacao {
   condominio   Condominio      @relation(fields: [condominioId], references: [id])
   ano          Int
   trimestre    Int
+  tipo         TipoAvaliacao   @default(ADMINISTRADORA)
   status       StatusAvaliacao @default(RASCUNHO)
   entregaAte   DateTime?       @db.Date
+  // Checklist do trimestre (4 passos): quando e quem marcou. O passo 4 ("Enviada à BGRE") é o status ENTREGUE, com a
+  // data em entregueEm.
+  passo1Em     DateTime?
+  passo1Por    String?
+  passo2Em     DateTime?
+  passo2Por    String?
+  passo3Em     DateTime?
+  passo3Por    String?
   entregueEm   DateTime?
+  passo4Por    String?
+  // Anotações de andamento ("Falta: SST de setembro (2.5)") e a nota estimada enquanto não há nota final.
+  andamento    String[]        @default([])
+  andamentoEm  DateTime?       @db.Date
+  estimativa   Decimal?        @db.Decimal(5, 2)
   notas        NotaItem[]
   criadoEm     DateTime        @default(now())
   atualizadoEm DateTime        @updatedAt
 
-  @@unique([condominioId, ano, trimestre])
+  @@unique([condominioId, ano, trimestre, tipo])
   @@index([ano, trimestre])
 }
 

@@ -1,11 +1,13 @@
 import ExcelJS from "exceljs";
-import { ESCALA, FONTES, GRUPOS, calcular, classificar, formatarPeriodo, mesesDoPeriodo, type Notas, type Periodo } from "./scorecard";
+import { ESCALA, FONTES, MODELOS, calcular, classificar, formatarPeriodo, mesesDoPeriodo, type Notas, type Periodo, type Tipo } from "./scorecard";
 
 // "Gerar planilha BGRE": a avaliação do trimestre num .xlsx, no padrão de planilha da DF (Calibri 10, cabeçalho
 // azul-marinho 2F4162 com texto branco, bordas finas A6A6A6, painel congelado).
 // shortcut: formato próprio da DF; trocar pelo modelo oficial da BGRE quando o usuário mandar o arquivo deles.
 
 export type DadosPlanilha = {
+  /** Padrão: Administradora. */
+  tipo?: Tipo;
   condominio: string;
   contratada: string;
   periodo: Periodo;
@@ -25,14 +27,15 @@ const fundo = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as
 const pct = (v: number | null | undefined) => (typeof v === "number" ? v / 100 : null);
 
 export async function planilhaBgre(d: DadosPlanilha): Promise<Buffer> {
-  const r = calcular(d.notas);
+  const modelo = MODELOS[d.tipo ?? "ADMINISTRADORA"];
+  const r = calcular(d.notas, modelo.tipo);
   const wb = new ExcelJS.Workbook();
   wb.creator = "DF Síndicos · Carteira BGRE";
   const ws = wb.addWorksheet(`Avaliação ${formatarPeriodo(d.periodo)}`, { views: [{ showGridLines: false }] });
   ws.properties.defaultRowHeight = 15;
   [3, 9, 62, 12, 11, 15, 50].forEach((w, i) => (ws.getColumn(i + 1).width = w));
 
-  ws.getCell("B2").value = "AVALIAÇÃO TRIMESTRAL DA GERENCIADORA · SCORE CARD";
+  ws.getCell("B2").value = modelo.titulo;
   ws.getCell("B2").font = { name: "Calibri", size: 16, bold: true, color: { argb: MARINHO } };
   ws.getCell("B3").value = `${d.condominio} · ${formatarPeriodo(d.periodo)} (${mesesDoPeriodo(d.periodo)})`;
   ws.getCell("B3").font = { name: "Calibri", size: 12, color: { argb: "FF5B6470" } };
@@ -82,7 +85,7 @@ export async function planilhaBgre(d: DadosPlanilha): Promise<Buffer> {
     return row;
   };
 
-  GRUPOS.forEach((g, gi) => {
+  modelo.grupos.forEach((g, gi) => {
     const res = r.grupos[gi]!;
     const row = escrever([`${gi + 1}`, `${g.nome} · peso ${Math.round(g.peso * 100)}%`, "", pct(res.media), res.classificacao ?? "", ""], { grupo: true });
     ws.mergeCells(row.number, 3, row.number, 4);

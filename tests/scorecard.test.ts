@@ -10,6 +10,10 @@ import {
   periodoAnterior,
   periodoEmAvaliacao,
   prazoPadrao,
+  MODELOS,
+  GRUPOS_SINDICANCIA,
+  faixaMapa,
+  lerTipo,
 } from "@/lib/scorecard";
 
 const todas = (v: number) => Object.fromEntries(CODIGOS.map((c) => [c, v]));
@@ -74,5 +78,43 @@ describe("Score Card", () => {
     expect(periodoEmAvaliacao(new Date(2026, 9, 24))).toEqual({ ano: 2026, trimestre: 3 });
     expect(prazoPadrao({ ano: 2026, trimestre: 3 }).toISOString().slice(0, 10)).toBe("2026-10-31");
     expect(prazoPadrao({ ano: 2026, trimestre: 4 }).toISOString().slice(0, 10)).toBe("2027-01-31");
+  });
+});
+
+describe("Score Card da Sindicância", () => {
+  const sin = MODELOS.SINDICANCIA;
+  const todasSin = (v: number) => Object.fromEntries(sin.codigos.map((c) => [c, v]));
+
+  it("tem os 4 grupos com pesos 20/30/30/20 e os 13 itens", () => {
+    expect(GRUPOS_SINDICANCIA.map((g) => g.peso)).toEqual([0.2, 0.3, 0.3, 0.2]);
+    expect(GRUPOS_SINDICANCIA.map((g) => g.itens.length)).toEqual([2, 1, 8, 2]);
+    expect(sin.codigos).toEqual(["1.1", "1.2", "2.1", "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8", "4.1", "4.2"]);
+    expect(sin.codigos).toHaveLength(13);
+    expect(sin.passos.map((p) => p.titulo)).toEqual(["Controle do trimestre reunido", "Planilha da Sindicância preenchida", "Notas conferidas", "Enviada à BGRE e validada"]);
+    expect(MODELOS.ADMINISTRADORA.passos).toHaveLength(4);
+    expect(lerTipo("SINDICANCIA")).toBe("SINDICANCIA");
+    expect(lerTipo("qualquer")).toBe("ADMINISTRADORA");
+  });
+
+  it("final = Σ média simples do grupo × peso, só com todos os itens", () => {
+    const notas = { ...todasSin(100), "1.1": 80, "1.2": 90, "3.4": 60 };
+    const r = calcular(notas, "SINDICANCIA");
+    const esperado = 85 * 0.2 + 100 * 0.3 + ((100 * 7 + 60) / 8) * 0.3 + 100 * 0.2;
+    expect(r.grupos.map((g) => g.media)).toEqual([85, 100, 95, 100]);
+    expect(r.final).toBeCloseTo(esperado, 6);
+    expect(calcular({ "1.1": 90 }, "SINDICANCIA").faltam).toBe(12); // 13 itens, 1 com nota
+    // As notas da Administradora não fecham a Sindicância (códigos diferentes).
+    expect(calcular(todas(100), "SINDICANCIA").final).toBeNull();
+  });
+
+  it("mesma escala nos limites, sem ruído de ponto flutuante", () => {
+    expect(calcular(todasSin(98), "SINDICANCIA").classificacao).toBe("Bom");
+    expect(calcular(todasSin(98.01), "SINDICANCIA").classificacao).toBe("Excelente");
+    expect(calcular(todasSin(90), "SINDICANCIA").classificacao).toBe("Satisfatório");
+    expect(calcular(todasSin(79.99), "SINDICANCIA").classificacao).toBe("Ruim");
+  });
+
+  it("faixa do mapa: verde ≥ 90, âmbar 70–89,9, vermelho < 70", () => {
+    expect([faixaMapa(90), faixaMapa(89.99), faixaMapa(70), faixaMapa(69.99)]).toEqual(["ok", "atencao", "atencao", "erro"]);
   });
 });
