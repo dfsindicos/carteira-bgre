@@ -53,7 +53,7 @@ export async function mapearModelo(modelo: Buffer, tipo: Tipo): Promise<Mapa> {
       if (t || formula) celulas.push({ linha, coluna, t, n: normalizar(t), formula });
     }),
   );
-  // "Contratada: CBRE" na mesma célula, ou "Empreendimento:" com o valor na próxima célula preenchida da linha.
+  // "Contratada: <nome>" na mesma célula, ou "Empreendimento:" com o valor na próxima célula preenchida da linha.
   const lugar = (...rotulos: string[]): Lugar => {
     const c = celulas.find((x) => rotulos.some((r) => x.n.startsWith(r)) && !x.formula);
     if (!c) throw new Error(`Não achei o rótulo "${rotulos[0]}" no topo do modelo.`);
