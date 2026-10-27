@@ -1,13 +1,15 @@
 import { acaoSalvarAdministradora, acaoSalvarCondominio } from "@/app/acoes";
 import { FormularioLinha } from "@/components/formulario-linha";
+import { ModelosBgre } from "@/components/modelos-bgre";
 import { listarCadastro } from "@/lib/cadastro";
+import { listarModelos } from "@/lib/modelo-bgre";
 import { formatarPeriodo } from "@/lib/scorecard";
 
 const campo = "w-full border border-borda bg-superficie px-2 py-1.5 text-[14px] text-texto";
 const rotulo = "grid min-w-0 gap-0.5 text-[12px] text-suave";
 
 export default async function Cadastro() {
-  const [administradoras, condominios] = await listarCadastro();
+  const [[administradoras, condominios], modelos] = await Promise.all([listarCadastro(), listarModelos()]);
 
   const camposAdm = (a?: { id: string; nome: string; emails: string }) => (
     <>
@@ -107,6 +109,17 @@ export default async function Cadastro() {
             <li className="text-suave">Cadastre primeiro uma administradora.</li>
           )}
         </ul>
+      </section>
+
+      <section className="grid gap-2">
+        <h2 className="text-lg font-bold">Modelos da BGRE</h2>
+        <p className="text-[13px] text-suave">
+          A planilha oficial da BGRE em .xlsx, uma da Administradora e uma da Sindicância (pode ser uma já preenchida de outro trimestre). Com o modelo
+          aqui, “Gerar planilha BGRE” devolve o próprio arquivo da BGRE preenchido: cabeçalho, nota e comentário de cada item; o resto do arquivo
+          (logo, fórmulas, abas) fica como veio, e as notas por bloco e a final saem das fórmulas dela ao abrir. Quando a BGRE mudar o modelo, envie o
+          novo.
+        </p>
+        <ModelosBgre modelos={modelos.map((m) => ({ ...m, enviadoEm: m.enviadoEm.toISOString() }))} />
       </section>
     </>
   );

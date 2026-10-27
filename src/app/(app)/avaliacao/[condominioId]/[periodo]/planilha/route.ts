@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { carregarAvaliacao } from "@/lib/avaliacoes";
+import { carregarModelo, preencherModelo } from "@/lib/modelo-bgre";
 import { planilhaBgre } from "@/lib/planilha";
-import { CONTRATADA_SINDICANCIA, formatarPeriodo, lerPeriodo, lerTipo } from "@/lib/scorecard";
+import { CONTRATADA_SINDICANCIA, formatarPeriodo, lerPeriodo, lerTipo, mesesDoPeriodo } from "@/lib/scorecard";
 import { sessaoAtual } from "@/lib/sessao";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ condomin
   const dados = periodo && (await carregarAvaliacao(condominioId, periodo, tipo));
   if (!periodo || !dados?.avaliacao) return NextResponse.json({ erro: "Avaliação não encontrada." }, { status: 404 });
   const { condominio, avaliacao: a } = dados;
-  const arquivo = await planilhaBgre({
+  const d = {
     tipo,
     condominio: condominio.nome,
     contratada: tipo === "SINDICANCIA" ? CONTRATADA_SINDICANCIA : condominio.administradora.nome,
@@ -27,11 +28,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ condomin
     status: a.status,
     notas: a.notas,
     comentarios: a.comentarios,
-  });
+  };
+  // Com o modelo oficial da BGRE enviado no Cadastro, sai nele, com o nome de arquivo que a BGRE usa; sem, no formato da DF.
+  const modelo = await carregarModelo(tipo);
+  const arquivo = modelo ? await preencherModelo(modelo, { ...d, meses: mesesDoPeriodo(periodo) }) : await planilhaBgre(d);
+  const nome = modelo
+    ? `${condominio.nome} - ${formatarPeriodo(periodo)} - Planilha de Avaliação ${tipo === "SINDICANCIA" ? "Sindicância" : "Administração"}.xlsx`
+    : `BGRE-${tipo === "SINDICANCIA" ? "Sindicancia-" : ""}${nomeDeArquivo(condominio.nome)}-${formatarPeriodo(periodo)}.xlsx`;
   return new NextResponse(new Uint8Array(arquivo), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="BGRE-${tipo === "SINDICANCIA" ? "Sindicancia-" : ""}${nomeDeArquivo(condominio.nome)}-${formatarPeriodo(periodo)}.xlsx"`,
+      "Content-Disposition": `attachment; filename="${nomeDeArquivo(nome)}"; filename*=UTF-8''${encodeURIComponent(nome)}`,
       "Cache-Control": "no-store",
     },
   });
