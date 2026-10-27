@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { acaoAcompanhamento, acaoCriarAvaliacao } from "@/app/acoes";
 import { AbasTipo } from "@/components/abas-tipo";
+import { BotaoVoltar } from "@/components/botao-voltar";
 import { BotaoStatus, CampoPrazo, Checklist } from "@/components/acoes-avaliacao";
 import { Ponto, Situacao } from "@/components/classificacao";
 import { FormularioLinha } from "@/components/formulario-linha";
@@ -42,6 +43,7 @@ export default async function PaginaAvaliacao({
 
   return (
     <>
+      <BotaoVoltar href={`/avaliacao?tipo=${tipo}`} />
       <AbasTipo tipo={tipo} href={(t) => `/avaliacao/${condominio.id}/${p}?tipo=${t}`} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-1">
