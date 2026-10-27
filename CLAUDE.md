@@ -13,7 +13,7 @@ Idioma de trabalho: **português do Brasil** — chat, código de domínio, comm
 - **Login Microsoft** da DF. Não existe entrada sem login, nem em desenvolvimento.
 - **Porta de entrada compartilhada:** HTTPS e roteamento no Caddy único do `dfsindicos/vps-gestaodfsindicos`. Este repositório não sobe Caddy próprio.
 - **Domínio:** só `gestaodfsindicos.tech`.
-- Score Card: itens, pesos, escala e regras exatamente como no protótipo (`src/lib/scorecard.ts`); o da Sindicância como na planilha "Rev. 3 (Fevereiro 2024)" da Brookfield. A planilha gerada é provisória até o usuário mandar o modelo oficial da BGRE.
+- Score Card: itens, pesos, escala e regras exatamente como no protótipo (`src/lib/scorecard.ts`); o da Sindicância como na planilha "Rev. 3 (Fevereiro 2024)" da Brookfield. Planilha gerada: com o modelo oficial da BGRE enviado no Cadastro ("Modelos da BGRE", um por tipo, guardado no banco porque o repositório é público), "Gerar planilha BGRE" devolve o próprio arquivo da BGRE preenchido (`src/lib/modelo-bgre.ts`, decisão do usuário de 2026-10-27); sem modelo, o formato da DF (`src/lib/planilha.ts`).
 
 ## Ordem das entregas
 1. **Feita (2026-10-24):** esqueleto, cadastro, avaliação trimestral com Score Card, painel e "Gerar planilha BGRE". Itens de fonte "Action Log" digitados à mão.

@@ -19,20 +19,20 @@ model Administradora {
 }
 
 model Condominio {
-  id               String         @id @default(cuid())
-  nome             String         @unique
-  administradoraId String
-  administradora   Administradora @relation(fields: [administradoraId], references: [id])
+  id                     String         @id @default(cuid())
+  nome                   String         @unique
+  administradoraId       String
+  administradora         Administradora @relation(fields: [administradoraId], references: [id])
   // Sem exclusão: quem sai da carteira fica inativo, e o histórico das avaliações continua.
-  ativo            Boolean        @default(true)
+  ativo                  Boolean        @default(true)
   // Primeiro trimestre avaliado pela BGRE; os anteriores ficam "fora do período" no mapa. Vazio = desde o início do mapa.
   avaliadoDesdeAno       Int?
   avaliadoDesdeTrimestre Int?
-  avaliacoes       Avaliacao[]
+  avaliacoes             Avaliacao[]
   // Identificador do prédio no Flash Report ("torre-norte"): liga os dados da rotina ao cadastro.
-  flashSlug        String?        @unique
-  flashSemanas     FlashSemana[]
-  criadoEm         DateTime       @default(now())
+  flashSlug              String?        @unique
+  flashSemanas           FlashSemana[]
+  criadoEm               DateTime       @default(now())
 
   @@index([administradoraId])
 }
@@ -124,4 +124,15 @@ model FlashPainel {
   id           String   @id
   dados        Json
   atualizadoEm DateTime @updatedAt
+}
+
+// Modelo oficial da planilha da BGRE (.xlsx), um por tipo de avaliação, enviado pela tela Cadastro (pedido do usuário de
+// 2026-10-27). Fica no banco porque o repositório é público e o arquivo é da Brookfield. Sem modelo, "Gerar planilha
+// BGRE" usa o formato da DF.
+model ModeloPlanilha {
+  tipo       TipoAvaliacao @id
+  nome       String
+  arquivo    Bytes
+  enviadoEm  DateTime      @updatedAt
+  enviadoPor String
 }

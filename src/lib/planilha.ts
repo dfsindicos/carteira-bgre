@@ -3,7 +3,7 @@ import { ESCALA, FONTES, MODELOS, calcular, classificar, formatarPeriodo, mesesD
 
 // "Gerar planilha BGRE": a avaliação do trimestre num .xlsx, no padrão de planilha da DF (Calibri 10, cabeçalho
 // azul-marinho 2F4162 com texto branco, bordas finas A6A6A6, painel congelado).
-// shortcut: formato próprio da DF; trocar pelo modelo oficial da BGRE quando o usuário mandar o arquivo deles.
+// Usado só quando não há modelo oficial da BGRE no Cadastro; com ele, a planilha sai de src/lib/modelo-bgre.ts.
 
 export type DadosPlanilha = {
   /** Padrão: Administradora. */
