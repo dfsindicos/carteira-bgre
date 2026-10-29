@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { configMicrosoft, concluirLogin } from "@/lib/microsoft";
 import { COOKIE_SESSAO, OPCOES_COOKIE, criarSessao } from "@/lib/sessao";
+import { ForaDaDF } from "@/lib/acesso";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +12,9 @@ const COOKIE_ESTADO = { name: "login_microsoft", path: "/api/auth/callback/micro
 export async function GET(request: NextRequest) {
   const base = process.env.APP_URL || request.url;
   // O motivo vai para o log do servidor (workflow "VPS: diagnóstico"); a tela mostra só a mensagem genérica.
-  const falhou = (motivo: string) => {
+  const falhou = (motivo: string, erro = "microsoft") => {
     console.error(`[login microsoft] ${motivo} · ${request.headers.get("user-agent") ?? ""}`.slice(0, 500));
-    const r = NextResponse.redirect(new URL("/entrar?erro=microsoft", base));
+    const r = NextResponse.redirect(new URL(`/entrar?erro=${erro}`, base));
     r.cookies.delete(COOKIE_ESTADO);
     return r;
   };
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
     const pessoa = await concluirLogin(config, code, estado.verificador, estado.nonce);
     token = await criarSessao({ nome: pessoa.nome, email: pessoa.email });
   } catch (erro) {
-    return falhou(erro instanceof Error ? erro.message : String(erro));
+    return falhou(erro instanceof Error ? erro.message : String(erro), erro instanceof ForaDaDF ? "acesso" : "microsoft");
   }
 
   const resposta = NextResponse.redirect(new URL(estado.next, base));

@@ -17,7 +17,7 @@ describe("middleware: sem login não entra", () => {
   it("recusa cookie falso e deixa passar quem tem sessão válida", async () => {
     const falso = new NextRequest("http://localhost/", { headers: { cookie: `${COOKIE_SESSAO}=abc.def.ghi` } });
     expect((await middleware(falso)).status).toBe(307);
-    const token = await criarSessao({ nome: "Pessoa Teste", email: "pessoa@exemplo.test" });
+    const token = await criarSessao({ nome: "Pessoa Teste", email: "pessoa@dfsindicos.com.br" });
     const ok = await middleware(new NextRequest("http://localhost/", { headers: { cookie: `${COOKIE_SESSAO}=${token}` } }));
     expect(ok.status).toBe(200);
     expect(ok.headers.get("x-middleware-next")).toBe("1");

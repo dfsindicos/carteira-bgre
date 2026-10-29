@@ -38,3 +38,7 @@ Idioma de trabalho: **português do Brasil** — chat, código de domínio, comm
 
 ## Commits
 Mensagem em português, imperativo, uma linha de assunto e corpo explicando a decisão quando houver.
+
+## Acesso (2026-10-29)
+
+- **Login Microsoft só para a equipe da DF:** uma pessoa de administradora entrou no Vistorias como convidada do diretório Microsoft da DF; a mesma brecha existia aqui. O e-mail precisa ser de domínio da DF (`src/lib/acesso.ts`; `LOGIN_DOMINIOS` e `LOGIN_EMAILS` opcionais), convidado é recusado no login (tela "Esta conta não tem acesso") e a sessão de quem não passa cai em qualquer leitura.
