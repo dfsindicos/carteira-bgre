@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
+import { emailPermitido } from "./acesso";
 
 // Sessão em cookie assinado (HS256 com AUTH_SECRET); a mesma função serve ao middleware (Edge) e às rotas.
 export const COOKIE_SESSAO = "sessao";
@@ -16,12 +17,16 @@ export function criarSessao(sessao: Sessao) {
   return new SignJWT(sessao).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(`${DURACAO_S}s`).sign(chave());
 }
 
-/** Devolve a sessão do cookie, ou null se faltar, estiver vencida, adulterada, ou o servidor estiver sem AUTH_SECRET. */
+/**
+ * Devolve a sessão do cookie, ou null se faltar, estiver vencida, adulterada, for de quem não é da DF
+ * (ver `emailPermitido`) ou o servidor estiver sem AUTH_SECRET.
+ */
 export async function lerSessao(token: string | undefined): Promise<Sessao | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, chave(), { algorithms: ["HS256"] });
-    return typeof payload.nome === "string" && typeof payload.email === "string" ? { nome: payload.nome, email: payload.email } : null;
+    if (typeof payload.nome !== "string" || typeof payload.email !== "string" || !emailPermitido(payload.email)) return null;
+    return { nome: payload.nome, email: payload.email };
   } catch {
     return null;
   }

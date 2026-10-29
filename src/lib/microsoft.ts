@@ -1,6 +1,7 @@
 // Login com a conta Microsoft da DF (OpenID Connect, fluxo de código com PKCE). Só pessoas do diretório da DF entram
 // (decisão do usuário: "Login Microsoft da DF. Só pessoas da DF usam"). Mesmo código das Aprovações.
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { ForaDaDF, emailPermitido } from "./acesso";
 
 const BASE = process.env.MICROSOFT_LOGIN_URL || "https://login.microsoftonline.com";
 
@@ -75,5 +76,8 @@ export async function concluirLogin(config: ConfigMicrosoft, code: string, verif
 
   const email = String(payload.email ?? payload.preferred_username ?? "").trim().toLowerCase();
   if (!email || typeof payload.oid !== "string") throw new Error("Conta Microsoft sem e-mail.");
+  // Convidado do diretório (conta de outra empresa): o id_token traz "idp" com o emissor da casa dele.
+  const convidado = typeof payload.idp === "string" && !payload.idp.includes(config.tenant);
+  if (convidado || !emailPermitido(email)) throw new ForaDaDF(`conta de fora da DF recusada (${convidado ? "convidado" : "domínio"}): ${email.replace(/^[^@]*/, (m) => m.slice(0, 2) + "***")}`);
   return { oid: payload.oid, email, nome: typeof payload.name === "string" && payload.name ? payload.name : email };
 }

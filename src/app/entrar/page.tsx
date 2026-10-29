@@ -16,6 +16,11 @@ export default async function Entrar({ searchParams }: { searchParams: Promise<{
         </span>
         Entrar com a conta Microsoft
       </a>
+      {erro === "acesso" && (
+        <p role="alert" className="text-sm text-erro">
+          Esta conta não tem acesso à Carteira BGRE. O sistema é só da equipe da DF Síndicos.
+        </p>
+      )}
       {erro === "microsoft" && (
         <p role="alert" className="text-sm text-erro">
           Não foi possível entrar com a Microsoft. Tente de novo; só contas da DF Síndicos têm acesso.
