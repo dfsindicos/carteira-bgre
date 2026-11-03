@@ -32,6 +32,7 @@ model Condominio {
   // Identificador do prédio no Flash Report ("torre-norte"): liga os dados da rotina ao cadastro.
   flashSlug              String?        @unique
   flashSemanas           FlashSemana[]
+  demandas               Demanda[]
   criadoEm               DateTime       @default(now())
 
   @@index([administradoraId])
@@ -135,4 +136,128 @@ model ModeloPlanilha {
   arquivo    Bytes
   enviadoEm  DateTime      @updatedAt
   enviadoPor String
+}
+
+// ── Demandas da BGRE (decisões do usuário de 2026-11-03) ───────────────────────────────────────────────────────────
+// Cada e-mail da BGRE que pede algo à DF vira uma demanda (substitui os cards "[BGRE]" do Planner). A Triagem
+// Contratante grava por /api/integracao/demandas; a DF trabalha em /demandas. Sem ligação com o Score Card: o
+// condomínio é só um campo para filtrar, e pode ficar vazio. Nada se apaga: arquiva com motivo.
+
+enum Criticidade {
+  CRITICA
+  URGENTE
+  ORDINARIA
+  COMPLEXA
+}
+
+enum SituacaoDemanda {
+  ABERTA
+  EM_ANDAMENTO
+  AGUARDANDO
+  CONCLUIDA
+  ARQUIVADA
+}
+
+enum AguardandoDemanda {
+  DF
+  BGRE
+  ADMINISTRADORA
+  CORRETORA
+  FORNECEDOR
+}
+
+// Unidade de um prazo do SLA: horas corridas, dias úteis ou prazo combinado com a BGRE (só na conclusão).
+enum UnidadePrazo {
+  HORAS
+  DIAS_UTEIS
+  COMBINADO
+}
+
+enum TipoMensagemDemanda {
+  // Mensagem de fora da DF na conversa (BGRE, administradora…), ou o pedido registrado à mão.
+  RECEBIDA
+  // Mensagem enviada por alguém da DF na conversa (a primeira marca a 1ª resposta).
+  ENVIADA_DF
+  // Andamento registrado pela tela.
+  NOTA
+}
+
+model Demanda {
+  id                  String             @id @default(cuid())
+  numero              Int                @unique @default(autoincrement())
+  titulo              String
+  remetenteNome       String             @default("")
+  remetenteEmail      String             @default("")
+  condominioId        String?
+  condominio          Condominio?        @relation(fields: [condominioId], references: [id])
+  criticidade         Criticidade        @default(ORDINARIA)
+  // Envio do e-mail da BGRE (ou o horário informado no registro à mão): o relógio do SLA começa aqui.
+  chegadaEm           DateTime
+  // Prazo escrito no e-mail (prevalece sobre o SLA, se a configuração mandar) e o prazo combinado com a BGRE.
+  prazoEmail          DateTime?          @db.Date
+  prazoCombinado      DateTime?          @db.Date
+  primeiraRespostaEm  DateTime?
+  primeiraRespostaPor String?
+  situacao            SituacaoDemanda    @default(ABERTA)
+  aguardando          AguardandoDemanda?
+  // E-mail ou nome de quem da DF cuida.
+  responsavel         String             @default("")
+  concluidaEm         DateTime?
+  arquivadaEm         DateTime?
+  motivoArquivo       String?
+  // Conversas do Outlook ligadas a esta demanda (normalmente uma; a mesma mensagem vista noutra caixa com outro ID de
+  // conversa acrescenta o dela). Vazio no registro à mão.
+  conversas           String[]           @default([])
+  webLink             String?
+  // TRIAGEM (rotina), MANUAL (tela: telefone, reunião…) ou PLANNER (carga única dos cards [BGRE]).
+  origem              String             @default("TRIAGEM")
+  canal               String?
+  origemPlanner       String?
+  mensagens           MensagemDemanda[]
+  criadoEm            DateTime           @default(now())
+  atualizadoEm        DateTime           @updatedAt
+
+  @@index([situacao])
+  @@index([condominioId])
+}
+
+model MensagemDemanda {
+  id                String              @id @default(cuid())
+  demandaId         String
+  demanda           Demanda             @relation(fields: [demandaId], references: [id])
+  // Chave da mensagem no e-mail: a mesma mensagem que chega às três caixas entra uma vez só. Nulo nas notas.
+  internetMessageId String?             @unique
+  conversationId    String?
+  tipo              TipoMensagemDemanda
+  em                DateTime
+  autorNome         String              @default("")
+  autorEmail        String              @default("")
+  assunto           String              @default("")
+  texto             String
+  caixa             String?
+  webLink           String?
+  criadoEm          DateTime            @default(now())
+
+  @@index([demandaId, em])
+}
+
+// SLA das demandas, uma linha por criticidade, editável em /demandas/sla (padrão: o do Einstein). Linha que falta usa
+// o padrão de src/lib/prazos-demandas.ts. Toda mudança grava LogAlteracao (entidade "ConfiguracaoSla").
+model SlaDemanda {
+  criticidade      Criticidade  @id
+  respostaValor    Int
+  respostaUnidade  UnidadePrazo
+  conclusaoValor   Int
+  conclusaoUnidade UnidadePrazo
+  atualizadoEm     DateTime     @updatedAt
+  atualizadoPor    String
+}
+
+// Opções do SLA (linha única, id "atual").
+model OpcoesSlaDemanda {
+  id                  String   @id
+  contarFeriados      Boolean  @default(true)
+  prazoEmailPrevalece Boolean  @default(true)
+  atualizadoEm        DateTime @updatedAt
+  atualizadoPor       String
 }

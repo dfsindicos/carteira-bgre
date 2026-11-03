@@ -31,11 +31,12 @@ Mesmo modelo do Vistorias e do Action Log: tudo na VPS roda pelo GitHub Actions,
 | `DOMINIO` | variável | `bgre.gestaodfsindicos.tech` |
 | `BACKUP_DESTINO` | variável | `onedrive:Backups/bgre` (vazio desliga a cópia externa) |
 | `FLASH_TOKEN` | segredo | senha da rotina do Flash Report (`openssl rand -hex 32`); o mesmo valor vai como variável `FLASH_TOKEN` no ambiente do Claude das rotinas. Vazio desliga `/api/integracao/flash` (503) |
+| `DEMANDAS_TOKEN` | segredo | senha da Triagem Contratante para as demandas da BGRE (`openssl rand -hex 32`); o mesmo valor vai como variável `DEMANDAS_TOKEN` no ambiente do Claude da rotina. Vazio desliga `/api/integracao/demandas` (503) |
 
 Sem `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` no GitHub: nascem no servidor (acima).
 
 ## `.env` do servidor (`/opt/bgre/.env`, escrito pelo deploy; não editar à mão)
-`MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `APP_URL` (`https://<DOMINIO>`), `DOMINIO`, `BACKUP_DESTINO`, `RETENCAO_DIAS=14`, mais `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` lidos dos arquivos do servidor. Cada linha vai como `NOME='valor'`.
+`MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `FLASH_TOKEN`, `DEMANDAS_TOKEN`, `APP_URL` (`https://<DOMINIO>`), `DOMINIO`, `BACKUP_DESTINO`, `RETENCAO_DIAS=14`, mais `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` lidos dos arquivos do servidor. Cada linha vai como `NOME='valor'`.
 
 ## O que o usuário precisa fazer antes do primeiro deploy
 1. **Repositório no GitHub** `dfsindicos/carteira-bgre` e o ambiente `producao`: https://github.com/dfsindicos/carteira-bgre/settings/environments, com os segredos e variáveis da tabela.
@@ -52,7 +53,7 @@ Sem `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` no GitHub: nascem no serv
 6. **Página inicial:** o bloco "Carteira BGRE" em `caddy/inicio/` do `vps-gestaodfsindicos` (protótipo, tela 1).
 
 ## Login
-Só pessoas da DF, com a conta Microsoft (OpenID Connect com PKCE, `src/lib/microsoft.ts`, o mesmo das Aprovações e do Vistorias). A sessão é um cookie assinado com `AUTH_SECRET`, de 30 dias. Tudo exige login, menos `/entrar`, `/api/auth/*`, `/api/saude`, `/api/cron/*` (com segredo próprio) e os arquivos da tela de entrada.
+Só pessoas da DF, com a conta Microsoft (OpenID Connect com PKCE, `src/lib/microsoft.ts`, o mesmo das Aprovações e do Vistorias). A sessão é um cookie assinado com `AUTH_SECRET`, de 30 dias. Tudo exige login, menos `/entrar`, `/api/auth/*`, `/api/saude`, `/api/cron/*` e `/api/integracao/*` (com segredo próprio) e os arquivos da tela de entrada.
 
 ## Score Card
 - Dois tipos de avaliação (`Avaliacao.tipo`), cada um com o seu Score Card em `src/lib/scorecard.ts` (`MODELOS`): **Administradora** (planilha 2T26 da Brookfield, 4 grupos 15/35/25/25, 16 itens) e **Sindicância** (a BGRE avalia a DF; "Rev. 3, fevereiro 2024", 4 grupos 20/30/30/20, 13 itens: 1.1–1.2, 2.1, 3.1–3.8, 4.1–4.2). Uma avaliação por condomínio, trimestre e tipo. Mudou a planilha deles? Muda lá e nos testes.
@@ -105,3 +106,44 @@ Segunda parte da tela **Importar**, rota `/api/importar/json` (JSON, sessão, me
 - **Cadastro → "Modelos da BGRE":** envie a planilha oficial em .xlsx, uma da Administradora e uma da Sindicância (pode ser uma já preenchida de outro trimestre). O servidor só aceita o arquivo em que acha os rótulos do topo (Contratada, Local de Prestação ou Empreendimento, Período avaliado), a linha com "#", "Peso" e "Comentário" e todos os itens do Score Card do tipo. Fica no banco (`ModeloPlanilha`), com `LogAlteracao`.
 - **"Gerar planilha BGRE"** com modelo: preenche o cabeçalho, a nota (fração, no formato % do modelo) e o comentário de cada item direto no XML da aba do Score Card; refaz as fórmulas das marcas "X" de todos os itens (o modelo pode trazer "X" digitado à mão), tira os resultados guardados das fórmulas e a cadeia de cálculo e liga o recálculo ao abrir. Logo, estilos, fórmulas e as outras abas ficam como vieram. Nome do arquivo: "<prédio> - <3T26> - Planilha de Avaliação Administração/Sindicância.xlsx". Item sem nota fica em branco.
 - Conferência feita em 2026-10-27 com os modelos reais de um prédio da carteira (Administração e Sindicância), abrindo no LibreOffice com recálculo: índices por bloco e avaliação final saem das fórmulas da BGRE.
+
+## Demandas da BGRE
+- **Tela:** `/demandas` (menu "Demandas"): indicadores (em aberto, sem 1ª resposta, prazo vencido, vencem em 7 dias, concluídas no prazo nos últimos 30 dias; clicar filtra), filtros por situação, condomínio e responsável, tabela e "Exportar Excel" (`/demandas/exportar`, com os mesmos filtros). Cada demanda abre em `/demandas/<id>`: criticidade, responsável, situação, aguardando quem, condomínio, prazo do e-mail e prazo combinado gravam ao mudar; "Registrar andamento", "Marcar 1ª resposta" (agora ou no horário informado), "Concluir", "Arquivar" (com motivo) e "Reabrir"; link do e-mail no Outlook. "Registrar demanda" (`/demandas/nova`) para o que chegou por telefone, reunião ou WhatsApp, com o horário em que chegou.
+- **SLA:** `/demandas/sla`. Padrão (o do Einstein): Crítica 1 h corrida / 4 h corridas (plano de ação); Urgente 4 h / 1 dia útil; Ordinária 1 du / 5 du; Complexa 2 du / prazo combinado (até 10 du). Dias úteis mantêm o horário e pulam sábado, domingo e (com a opção marcada) os feriados nacionais e de São Paulo; chegada em dia não útil conta das 8h do próximo dia útil. O prazo escrito no e-mail vale até 23h59 daquele dia e, com a opção marcada, prevalece sobre a conclusão do SLA. Em "prazo combinado", a conclusão é o "prazo combinado" anotado na demanda (sem ele, o do e-mail; sem nenhum, "a combinar"). Mudar o SLA recalcula as abertas.
+- **Integração (Triagem Contratante):** `https://bgre.gestaodfsindicos.tech/api/integracao/demandas`, cabeçalho `Authorization: Bearer $DEMANDAS_TOKEN`. Sem o segredo no servidor: 503; senha errada: 401.
+  - **POST** (JSON, até 5 MB, com `Content-Length`), lote de 1 a 100 mensagens:
+    ```
+    { "mensagens": [ {
+        "conversationId": "AAQkAD…",            // ID da conversa do Outlook (obrigatório)
+        "internetMessageId": "<abc@exemplo>",   // chave da mensagem (obrigatório; a mesma nas três caixas)
+        "assunto": "RE: Pedido de laudo",       // o título da demanda sai daqui, sem RE:/ENC:/FW:
+        "remetenteNome": "Fulano (BGRE)", "remetenteEmail": "fulano@…",
+        "enviadoEm": "2026-10-30T16:42:00-03:00",  // ISO 8601 com fuso: o relógio do SLA começa aqui
+        "caixa": "caixa-que-leu@dfsindicos.com.br",
+        "webLink": "https://outlook.office365.com/…",  // opcional, só https
+        "resumo": "Pede o laudo até 05/11.",          // texto que aparece na conversa
+        "demanda": true,                          // false = informativo: só registra se já houver demanda na conversa
+        "criticidadeSugerida": "ORDINARIA",       // opcional: CRITICA, URGENTE, ORDINARIA, COMPLEXA (aceita "Ordinária"); padrão ORDINARIA
+        "prazo": "2026-11-05",                    // opcional: prazo escrito no e-mail (AAAA-MM-DD)
+        "condominio": "Nome do prédio",           // opcional: casado pelo nome sem acento, caixa, pontuação e parênteses; sem achar = vazio
+        "responsavel": "pessoa@dfsindicos.com.br", // opcional, só na criação (carga do Planner)
+        "origemPlanner": "[BGRE] título do card"  // opcional: carga única dos cards antigos (origem PLANNER)
+    } ] }
+    ```
+    Regras: mensagem já gravada (`internetMessageId`) = duplicada, nada muda (se veio com outro `conversationId`, ele passa a apontar para a mesma demanda); conversa sem demanda + `demanda: true` + remetente de fora da DF = demanda nova; conversa com demanda = atualização (mensagem na linha do tempo; a primeira de `@dfsindicos.com.br` depois da chegada marca a 1ª resposta; de fora da DF com `prazo` diferente atualiza o prazo do e-mail; com envio anterior à chegada, a chegada recua); o resto é ignorado. O lote é processado na ordem de `enviadoEm`. Resposta 200:
+    ```
+    { "criadas": 1, "atualizadas": 2, "duplicadas": 2, "ignoradas": 1, "primeirasRespostas": 1,
+      "mensagens": [ { "internetMessageId": "<abc@exemplo>", "acao": "criada" | "atualizacao" | "duplicada" | "ignorada", "numero": 41 } ] }
+    ```
+    422 diz o campo fora do formato (`{ "erro": "Dados fora do formato em mensagens.0.enviadoEm: …" }`); 413 sem `Content-Length` ou acima de 5 MB.
+  - **GET** `?abertas=1` (para o e-mail diário [Triagem]): as demandas abertas (Aberta, Em andamento, Aguardando), por número:
+    ```
+    { "demandas": [ { "numero": 41, "titulo": "…", "condominio": "…" | null, "criticidade": "URGENTE",
+        "chegadaEm": "ISO", "primeiraRespostaEm": "ISO" | null, "primeiraRespostaAte": "ISO" | null,
+        "prazo": "ISO" | null, "prazoOrigem": "email" | "sla" | "combinado" | "a-combinar", "vencida": false,
+        "situacao": "ABERTA", "situacaoPrazo": "Vence 05/11", "aguardando": "DF" | null, "responsavel": "…" | null,
+        "link": "https://outlook…" | null, "pagina": "https://bgre.gestaodfsindicos.tech/demandas/<id>" } ] }
+    ```
+  - Exemplo: `curl -sf -X POST -H "Authorization: Bearer $DEMANDAS_TOKEN" -H "Content-Type: application/json" --data-binary @/tmp/lote.json https://bgre.gestaodfsindicos.tech/api/integracao/demandas`.
+- **Antes de ligar a rotina:** criar o segredo `DEMANDAS_TOKEN` no ambiente `producao` (https://github.com/dfsindicos/carteira-bgre/settings/environments), rodar "VPS: deploy" (um deploy por vez) e pôr o mesmo valor no ambiente do Claude da rotina. A leitura das três caixas da equipe da DF é da própria rotina (como no Einstein).
+

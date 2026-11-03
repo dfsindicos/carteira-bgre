@@ -1,21 +1,12 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
 import { gravarFlash, lerFlash } from "@/lib/flash";
+import { conferirToken, responder } from "@/lib/token";
 
 export const dynamic = "force-dynamic";
 
 // Endereço da rotina do Flash Report (segunda e quarta): GET lê o painel no formato DATA, POST grava o DATA novo.
 // Fora do login Microsoft (middleware); a senha é FLASH_TOKEN, comparada em tempo constante. Sem ela, desligado.
 const LIMITE = 10 * 1024 * 1024;
-const responder = (corpo: unknown, status = 200) => NextResponse.json(corpo, { status, headers: { "Cache-Control": "no-store" } });
-const resumo = (s: string) => createHash("sha256").update(s).digest();
-
-function autorizado(req: Request) {
-  const token = process.env.FLASH_TOKEN;
-  if (!token) return responder({ erro: "FLASH_TOKEN não configurado no servidor." }, 503);
-  const enviado = (req.headers.get("authorization") ?? "").replace(/^Bearer /, "");
-  return timingSafeEqual(resumo(enviado), resumo(token)) ? null : responder({ erro: "Senha inválida." }, 401);
-}
+const autorizado = (req: Request) => conferirToken(req, "FLASH_TOKEN");
 
 export async function GET(req: Request) {
   const negado = autorizado(req);
