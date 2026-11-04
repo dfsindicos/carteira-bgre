@@ -205,6 +205,11 @@ model Demanda {
   primeiraRespostaPor String?
   situacao            SituacaoDemanda    @default(ABERTA)
   aguardando          AguardandoDemanda?
+  // Análise (pedido do usuário de 2026-11-04): o que a BGRE pediu (com a frase original), a ação concreta da DF e o
+  // próximo passo. A Triagem sugere; quem edita pela tela manda.
+  pedido              String?
+  oQueFazer           String?
+  proximoPasso        String?
   // E-mail ou nome de quem da DF cuida.
   responsavel         String             @default("")
   concluidaEm         DateTime?

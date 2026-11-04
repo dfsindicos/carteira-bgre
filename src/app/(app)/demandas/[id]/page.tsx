@@ -42,6 +42,25 @@ export default async function DemandaPagina({ params }: { params: Promise<{ id: 
         )}
       </div>
 
+      <section aria-label="Análise" className="grid gap-2 border border-borda border-l-[3px] border-l-ouro bg-superficie p-4">
+        <h2 className="text-[11px] font-bold tracking-widest uppercase">Análise</h2>
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="grid content-start gap-1 text-[12px] text-suave">
+            Pedido (o que a BGRE pediu)
+            <CampoDemanda id={d.id} campo="pedido" rotulo="Pedido" tipo="textarea" valor={d.pedido ?? ""} desabilitado={arquivada} />
+          </label>
+          <label className="grid content-start gap-1 text-[12px] text-suave">
+            O que a DF faz
+            <CampoDemanda id={d.id} campo="oQueFazer" rotulo="O que a DF faz" tipo="textarea" valor={d.oQueFazer ?? ""} desabilitado={arquivada} />
+          </label>
+          <label className="grid content-start gap-1 text-[12px] text-suave">
+            Próximo passo
+            <CampoDemanda id={d.id} campo="proximoPasso" rotulo="Próximo passo" tipo="textarea" valor={d.proximoPasso ?? ""} desabilitado={arquivada} />
+          </label>
+        </div>
+        <p className="text-[12px] text-suave">A Triagem sugere; o que for editado aqui não é trocado por ela.</p>
+      </section>
+
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="grid gap-4">
           <section className="grid gap-2 border border-borda bg-superficie p-4">

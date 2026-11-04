@@ -112,6 +112,11 @@ export default async function Demandas({ searchParams }: { searchParams: Promise
                   <Link href={`/demandas/${d.id}`} className="font-bold hover:underline">
                     {d.titulo}
                   </Link>
+                  {d.oQueFazer && (
+                    <span className="block max-w-[52ch] truncate text-[12.5px]" title={d.oQueFazer}>
+                      → {d.oQueFazer}
+                    </span>
+                  )}
                   <span className="block text-[12px] text-suave">
                     {d.remetenteNome || d.remetenteEmail || "—"} · <b>{ROTULO_CRITICIDADE[d.criticidade]}</b> ·{" "}
                     {d.responsavel ? d.responsavel : <b>sem responsável</b>}

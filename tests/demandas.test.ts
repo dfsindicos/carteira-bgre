@@ -12,12 +12,13 @@ import {
   reabrirDemanda,
   registrarAndamento,
   registrarDemanda,
+  reprocessarDemandas,
   salvarSla,
   voltarSlaPadrao,
   type MensagemIntegracao,
 } from "@/lib/demandas";
 import { SLA_PADRAO, prazoConclusao } from "@/lib/prazos-demandas";
-import { GET, POST } from "@/app/api/integracao/demandas/route";
+import { GET, PATCH, POST } from "@/app/api/integracao/demandas/route";
 import { limparECriar } from "./dados";
 
 // Tudo sintético: pessoas e e-mails de exemplo.test, prédio "Torre Teste" de tests/dados.ts.
@@ -314,6 +315,98 @@ describe("Reunião e Toda a carteira (pedidos do usuário de 2026-11-04)", () =>
     process.env.DEMANDAS_TOKEN = "token-de-teste-1234567890";
     const { demandas } = await (await GET(new Request("http://localhost/api/integracao/demandas?abertas=1", { headers: { authorization: "Bearer token-de-teste-1234567890" } }))).json();
     expect(demandas.filter((d: { condominio: string | null }) => d.condominio === "Toda a carteira")).toHaveLength(2);
+    delete process.env.DEMANDAS_TOKEN;
+  });
+});
+
+describe("análise da Triagem: a tela manda, a rotina só sugere (decisões do usuário de 2026-11-04)", () => {
+  const analise = {
+    titulo: "Enviar o laudo do gerador à BGRE",
+    pedido: "“Favor enviar o laudo do gerador até 05/11.”",
+    oQueFazer: "Pedir o laudo à administradora e enviar à BGRE.",
+    proximoPasso: "Cobrar a administradora amanhã.",
+  };
+
+  it("cria com título, análise, aguardando e toda a carteira; DF em cópia nasce aguardando a administradora", async () => {
+    const r = await integrarMensagens({
+      mensagens: [
+        msg({ ...analise, todaCarteira: true, condominio: null }),
+        msg({ conversationId: "conv-cc", internetMessageId: "<cc@x>", demanda: true, situacaoSugerida: "AGUARDANDO", aguardando: "Administradora", oQueFazer: "Acompanhar a resposta da administradora." }),
+        msg({ conversationId: "conv-l", internetMessageId: "<l@x>", situacaoSugerida: "Em andamento", aguardando: "LOCATARIO" }),
+      ],
+    });
+    expect(r).toMatchObject({ criadas: 3 });
+    expect(await prisma.demanda.findFirstOrThrow({ where: { conversas: { has: "conv-1" } } })).toMatchObject({ ...analise, todaCarteira: true, condominioId: null, situacao: "ABERTA" });
+    expect(await prisma.demanda.findFirstOrThrow({ where: { conversas: { has: "conv-cc" } } })).toMatchObject({ situacao: "AGUARDANDO", aguardando: "ADMINISTRADORA" });
+    expect(await prisma.demanda.findFirstOrThrow({ where: { conversas: { has: "conv-l" } } })).toMatchObject({ situacao: "EM_ANDAMENTO", aguardando: "LOCATARIO" });
+    expect(await integrarMensagens({ mensagens: [msg({ situacaoSugerida: "CONCLUIDA" })] })).toMatchObject({ erro: expect.stringMatching(/situacaoSugerida/) });
+    expect(await integrarMensagens({ mensagens: [msg({ titulo: "x".repeat(121) })] })).toMatchObject({ erro: expect.stringMatching(/titulo/) });
+
+    process.env.DEMANDAS_TOKEN = "token-de-teste-1234567890";
+    const { demandas } = await (await GET(new Request("http://localhost/api/integracao/demandas?abertas=1", { headers: { authorization: "Bearer token-de-teste-1234567890" } }))).json();
+    expect(demandas.find((d: { titulo: string }) => d.titulo === analise.titulo)).toMatchObject({ pedido: analise.pedido, oQueFazer: analise.oQueFazer, proximoPasso: analise.proximoPasso, condominio: "Toda a carteira" });
+    delete process.env.DEMANDAS_TOKEN;
+  });
+
+  it("mensagem nova na conversa atualiza a análise e a situação, menos o que uma pessoa editou pela tela; nunca reabre", async () => {
+    await integrarMensagens({ mensagens: [msg(analise)] });
+    const d = await prisma.demanda.findFirstOrThrow();
+    expect(await atualizarDemanda(EMAIL, d.id, "oQueFazer", "Ligar para a BGRE.")).toEqual({ ok: true });
+    expect(await atualizarDemanda(EMAIL, d.id, "aguardando", "BGRE")).toEqual({ ok: true });
+
+    const r = await integrarMensagens({
+      mensagens: [
+        msg({ internetMessageId: "<m2@x>", enviadoEm: "2026-10-31T10:00:00-03:00", demanda: false, oQueFazer: "Outra ação", proximoPasso: "Novo passo", situacaoSugerida: "AGUARDANDO", aguardando: "FORNECEDOR" }),
+      ],
+    });
+    expect(r).toMatchObject({ atualizadas: 1 });
+    if ("erro" in r) throw new Error(r.erro);
+    expect(r.mensagens[0]).toMatchObject({ mudou: ["próximo passo", "situação"], preservado: ["o que a DF faz", "aguardando"] });
+    expect(await prisma.demanda.findUniqueOrThrow({ where: { id: d.id } })).toMatchObject({ oQueFazer: "Ligar para a BGRE.", proximoPasso: "Novo passo", situacao: "AGUARDANDO", aguardando: "BGRE" });
+    expect(await prisma.logAlteracao.count({ where: { entidadeId: d.id, email: "rotina Triagem Contratante", campo: { in: ["próximo passo", "situação"] } } })).toBe(2);
+
+    // Uma pessoa muda a situação: a rotina não troca mais; e concluída a rotina não reabre.
+    expect(await atualizarDemanda(EMAIL, d.id, "situacao", "EM_ANDAMENTO")).toEqual({ ok: true });
+    await integrarMensagens({ mensagens: [msg({ internetMessageId: "<m3@x>", enviadoEm: "2026-11-01T10:00:00-03:00", demanda: false, situacaoSugerida: "REUNIAO" })] });
+    expect((await prisma.demanda.findUniqueOrThrow({ where: { id: d.id } })).situacao).toBe("EM_ANDAMENTO");
+  });
+
+  it("PATCH reprocessa as abertas: troca o que ninguém editou, preserva o resto e recusa fechada", async () => {
+    await integrarMensagens({ mensagens: [msg({ prazo: null }), msg({ conversationId: "conv-2", internetMessageId: "<b@x>", assunto: "Outro" })] });
+    const [a, b] = await prisma.demanda.findMany({ orderBy: { numero: "asc" } });
+    expect(await atualizarDemanda(EMAIL, a!.id, "titulo", "Título escolhido pela equipe")).toEqual({ ok: true });
+    expect(await atualizarDemanda(EMAIL, b!.id, "situacao", "CONCLUIDA")).toEqual({ ok: true });
+
+    const r = await reprocessarDemandas({
+      demandas: [
+        { numero: a!.numero, ...analise, condominio: "Todos os condomínios", criticidadeSugerida: "URGENTE", aguardando: "DF" },
+        { numero: b!.numero, ...analise },
+        { numero: 99999, pedido: "x" },
+      ],
+    });
+    expect(r).toMatchObject({ alteradas: 1, recusadas: 2 });
+    if ("erro" in r) throw new Error(r.erro);
+    expect(r.demandas[0]).toMatchObject({ preservado: ["título"] });
+    expect(r.demandas[0]!.mudou).toEqual(["pedido", "o que a DF faz", "próximo passo", "aguardando", "criticidade", "condomínio"]);
+    expect(r.demandas[1]!.erro).toMatch(/concluída/);
+    expect(await prisma.demanda.findUniqueOrThrow({ where: { id: a!.id } })).toMatchObject({
+      titulo: "Título escolhido pela equipe",
+      pedido: analise.pedido,
+      criticidade: "URGENTE",
+      todaCarteira: true,
+      condominioId: null,
+    });
+    expect((await prisma.demanda.findUniqueOrThrow({ where: { id: b!.id } })).pedido).toBeNull();
+    // Rodar de novo não muda nada.
+    expect(await reprocessarDemandas({ demandas: [{ numero: a!.numero, ...analise, criticidadeSugerida: "URGENTE" }] })).toMatchObject({ alteradas: 0, semMudanca: 1 });
+
+    process.env.DEMANDAS_TOKEN = "token-de-teste-1234567890";
+    const corpo = JSON.stringify({ demandas: [{ numero: a!.numero, proximoPasso: "Ligar na sexta." }] });
+    const res = await PATCH(
+      new Request("http://localhost/api/integracao/demandas", { method: "PATCH", headers: { authorization: "Bearer token-de-teste-1234567890", "content-length": String(Buffer.byteLength(corpo)) }, body: corpo }),
+    );
+    expect(await res.json()).toMatchObject({ alteradas: 1, demandas: [{ mudou: ["próximo passo"] }] });
+    expect((await PATCH(new Request("http://localhost/api/integracao/demandas", { method: "PATCH", headers: { authorization: "Bearer errado" } }))).status).toBe(401);
     delete process.env.DEMANDAS_TOKEN;
   });
 });

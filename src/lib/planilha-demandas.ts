@@ -20,6 +20,9 @@ export async function planilhaDemandas(linhas: Linha[]): Promise<Buffer> {
   const colunas: [string, number, string?][] = [
     ["Nº", 6],
     ["Demanda", 48],
+    ["Pedido", 40],
+    ["O que a DF faz", 40],
+    ["Próximo passo", 30],
     ["Pedido por", 26],
     ["E-mail", 28],
     ["Condomínio", 24],
@@ -42,6 +45,9 @@ export async function planilhaDemandas(linhas: Linha[]): Promise<Buffer> {
     ws.addRow([
       d.numero,
       d.titulo,
+      d.pedido ?? "",
+      d.oQueFazer ?? "",
+      d.proximoPasso ?? "",
       d.remetenteNome,
       d.remetenteEmail,
       nomeCondominio(d) ?? "",
@@ -63,7 +69,7 @@ export async function planilhaDemandas(linhas: Linha[]): Promise<Buffer> {
     row.eachCell({ includeEmpty: true }, (c) => {
       c.font = n === 1 ? { name: "Calibri", size: 10, bold: true, color: { argb: "FFFFFFFF" } } : { name: "Calibri", size: 10 };
       if (n === 1) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: MARINHO } };
-      c.alignment = { vertical: "top", wrapText: n === 1 || Number(c.col) === 2 };
+      c.alignment = { vertical: "top", wrapText: n === 1 || [2, 3, 4, 5].includes(Number(c.col)) };
       c.border = BORDAS;
     }),
   );

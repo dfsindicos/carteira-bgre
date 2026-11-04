@@ -51,7 +51,7 @@ export function CampoDemanda({
   valor: string;
   rotulo: string;
   opcoes?: [string, string][];
-  tipo?: "text" | "date";
+  tipo?: "text" | "date" | "textarea";
   lista?: string[];
   desabilitado?: boolean;
 }) {
@@ -75,6 +75,15 @@ export function CampoDemanda({
             </option>
           ))}
         </select>
+      ) : tipo === "textarea" ? (
+        <textarea
+          aria-label={rotulo}
+          defaultValue={valor}
+          disabled={desabilitado || pendente}
+          onBlur={(e) => gravar(e.target.value.trim())}
+          rows={2}
+          className={`${cls} min-h-16`}
+        />
       ) : (
         <>
           <input

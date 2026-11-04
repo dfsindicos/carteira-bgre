@@ -18,6 +18,7 @@ import {
   situacaoResposta,
   vencida,
   type ConfigSla,
+  type Criticidade,
   type DemandaPrazo,
 } from "./prazos-demandas";
 
@@ -137,6 +138,28 @@ export const historicoSla = () => prisma.logAlteracao.findMany({ where: { entida
 
 // ── Integração com a Triagem Contratante ────────────────────────────────────────────────────────────────────────────
 
+// O que a rotina sugere (decisões do usuário de 2026-11-04). Texto vazio = não mexe. A rotina nunca conclui nem arquiva.
+export const SITUACOES_SUGERIDAS = ["ABERTA", "EM_ANDAMENTO", "AGUARDANDO", "REUNIAO"] as const;
+type SituacaoSugerida = (typeof SITUACOES_SUGERIDAS)[number];
+const esquemaSituacaoSugerida = z.preprocess(semAcento, z.enum(SITUACOES_SUGERIDAS));
+const esquemaAguardando = z.preprocess(semAcento, z.enum(AGUARDANDO));
+const textoSugerido = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullish()
+    .transform((t) => t || undefined);
+const camposSugeridos = {
+  titulo: textoSugerido(120),
+  pedido: textoSugerido(5000),
+  oQueFazer: textoSugerido(2000),
+  proximoPasso: textoSugerido(500),
+  aguardando: esquemaAguardando.nullish(),
+  situacaoSugerida: esquemaSituacaoSugerida.nullish(),
+  todaCarteira: z.boolean().nullish(),
+};
+
 const esquemaMensagem = z.object({
   conversationId: z.string().trim().min(1).max(1000),
   internetMessageId: z.string().trim().min(1).max(1000),
@@ -151,10 +174,11 @@ const esquemaMensagem = z.object({
   criticidadeSugerida: esquemaCriticidade.nullish(),
   prazo: z.iso.date().nullish(),
   condominio: z.string().max(300).nullish(),
-  // Convite ou agendamento de reunião: a demanda nova nasce com a situação Reunião (não muda demanda existente).
+  // Atalho antigo de situacaoSugerida: "REUNIAO" (só na criação).
   reuniao: z.boolean().nullish(),
   responsavel: z.string().trim().max(300).nullish(),
   origemPlanner: z.string().max(5000).nullish(),
+  ...camposSugeridos,
 });
 export const esquemaLote = z.object({ mensagens: z.array(esquemaMensagem).min(1, "Mande ao menos uma mensagem.").max(100, "No máximo 100 mensagens por envio.") });
 export type MensagemIntegracao = z.input<typeof esquemaMensagem>;
@@ -165,8 +189,76 @@ export type ResultadoIntegracao = {
   duplicadas: number;
   ignoradas: number;
   primeirasRespostas: number;
-  mensagens: { internetMessageId: string; acao: "criada" | "atualizacao" | "duplicada" | "ignorada"; numero?: number }[];
+  mensagens: { internetMessageId: string; acao: "criada" | "atualizacao" | "duplicada" | "ignorada"; numero?: number; mudou?: string[]; preservado?: string[] }[];
 };
+
+// ── "A tela manda; a rotina só sugere" ─────────────────────────────────────────────────────────────────────────────
+
+/** O campo (rótulo do LogAlteracao) foi mudado por uma pessoa depois da última gravação da rotina nele? */
+async function editadoPorPessoa(tx: Tx, demandaId: string, rotulo: string) {
+  const ultimo = (pessoa: boolean) =>
+    tx.logAlteracao.findFirst({
+      where: { entidade: "Demanda", entidadeId: demandaId, campo: rotulo, email: pessoa ? { not: ROTINA } : ROTINA },
+      orderBy: { em: "desc" },
+      select: { em: true },
+    });
+  const [pessoa, rotina] = await Promise.all([ultimo(true), ultimo(false)]);
+  return !!pessoa && (!rotina || pessoa.em > rotina.em);
+}
+
+type Sugestao = {
+  titulo?: string;
+  pedido?: string;
+  oQueFazer?: string;
+  proximoPasso?: string;
+  situacao?: SituacaoSugerida | null;
+  aguardando?: Aguardando | null;
+  criticidade?: Criticidade | null;
+  condominio?: { condominioId: string | null; todaCarteira: boolean; nome: string | null };
+};
+type DemandaComCondominio = NonNullable<Awaited<ReturnType<typeof buscarDemanda>>>;
+const buscarDemanda = (tx: Tx, where: { id: string } | { numero: number }) => tx.demanda.findUnique({ where, include: { condominio: { select: { nome: true } } } });
+
+/**
+ * Aplica o que a rotina sugere numa demanda que já existe: cada campo só muda se nenhuma pessoa o mudou pela tela
+ * depois da última gravação da rotina; a situação só muda em demanda aberta (a rotina nunca conclui nem arquiva). Cada
+ * mudança grava LogAlteracao com o e-mail da rotina, para aparecer na linha do tempo.
+ */
+async function aplicarSugestoes(tx: Tx, d: DemandaComCondominio, s: Sugestao) {
+  const mudou: string[] = [];
+  const preservado: string[] = [];
+  const data: Record<string, unknown> = {};
+  const tentar = async (campo: CampoDemanda, antes: string | null, depois: string | null, aplicar: () => void) => {
+    if (antes === depois) return;
+    const rotulo = ROTULO_CAMPO[campo];
+    if (await editadoPorPessoa(tx, d.id, rotulo)) return void preservado.push(rotulo);
+    aplicar();
+    await registrar(tx, ROTINA, "Demanda", d.id, rotulo, antes, depois);
+    mudou.push(rotulo);
+  };
+  for (const c of ["titulo", "pedido", "oQueFazer", "proximoPasso"] as const) {
+    const v = s[c];
+    if (v) await tentar(c, d[c] ?? null, v, () => (data[c] = v));
+  }
+  if (s.situacao && estaAberta(d)) {
+    const v = s.situacao;
+    await tentar("situacao", d.situacao, v, () => (data.situacao = v));
+  }
+  if (s.aguardando) {
+    const v = s.aguardando;
+    await tentar("aguardando", d.aguardando, v, () => (data.aguardando = v));
+  }
+  if (s.criticidade) {
+    const v = s.criticidade;
+    await tentar("criticidade", d.criticidade, v, () => (data.criticidade = v));
+  }
+  if (s.condominio) {
+    const v = s.condominio;
+    await tentar("condominioId", nomeCondominio(d), v.todaCarteira ? ROTULO_TODA_CARTEIRA : v.nome, () => Object.assign(data, { condominioId: v.condominioId, todaCarteira: v.todaCarteira }));
+  }
+  if (Object.keys(data).length) await tx.demanda.update({ where: { id: d.id }, data });
+  return { mudou, preservado };
+}
 
 const dataDe = (iso: string) => new Date(`${iso}T00:00:00Z`);
 const mesmoDia = (a: Date | null, b: Date | null) => (a ? a.toISOString().slice(0, 10) : null) === (b ? b.toISOString().slice(0, 10) : null);
@@ -224,16 +316,21 @@ export async function integrarMensagens(bruto: unknown): Promise<ResultadoIntegr
             r.mensagens.push({ internetMessageId: m.internetMessageId, acao: "ignorada" });
             continue;
           }
-          const todaCarteira = !!m.condominio && ehTodaCarteira(m.condominio);
+          const todaCarteira = !!m.todaCarteira || (!!m.condominio && ehTodaCarteira(m.condominio));
           const condominioId = m.condominio && !todaCarteira ? (porNome.get(normalizarNome(m.condominio)) ?? null) : null;
           const nova = await tx.demanda.create({
             data: {
-              titulo: (limparAssunto(m.assunto) || m.resumo.slice(0, 120) || "(sem assunto)").slice(0, 300),
+              titulo: m.titulo ?? (limparAssunto(m.assunto) || m.resumo.slice(0, 120) || "(sem assunto)").slice(0, 300),
+              pedido: m.pedido ?? null,
+              oQueFazer: m.oQueFazer ?? null,
+              proximoPasso: m.proximoPasso ?? null,
+              // "DF em cópia": a rotina manda situacaoSugerida AGUARDANDO e aguardando ADMINISTRADORA.
+              aguardando: m.aguardando ?? null,
               remetenteNome: m.remetenteNome,
               remetenteEmail: m.remetenteEmail,
               condominioId,
               todaCarteira,
-              situacao: m.reuniao ? "REUNIAO" : "ABERTA",
+              situacao: m.situacaoSugerida ?? (m.reuniao ? "REUNIAO" : "ABERTA"),
               criticidade: m.criticidadeSugerida ?? "ORDINARIA",
               chegadaEm: enviadoEm,
               prazoEmail: m.prazo ? dataDe(m.prazo) : null,
@@ -270,8 +367,81 @@ export async function integrarMensagens(bruto: unknown): Promise<ResultadoIntegr
         }
         if (!d.webLink && m.webLink) data.webLink = m.webLink;
         if (Object.keys(data).length) await tx.demanda.update({ where: { id: d.id }, data });
+        // A análise nova da rotina: só onde nenhuma pessoa mexeu pela tela.
+        const atual = (await buscarDemanda(tx, { id: d.id }))!;
+        const { mudou, preservado } = await aplicarSugestoes(tx, atual, {
+          pedido: m.pedido,
+          oQueFazer: m.oQueFazer,
+          proximoPasso: m.proximoPasso,
+          situacao: m.situacaoSugerida,
+          aguardando: m.aguardando,
+        });
         r.atualizadas++;
-        r.mensagens.push({ internetMessageId: m.internetMessageId, acao: "atualizacao", numero: d.numero });
+        r.mensagens.push({ internetMessageId: m.internetMessageId, acao: "atualizacao", numero: d.numero, mudou, preservado });
+      }
+      return r;
+    },
+    { timeout: 60_000 },
+  );
+}
+
+const esquemaReprocesso = z.object({
+  demandas: z
+    .array(z.object({ numero: z.number().int().positive(), condominio: z.string().max(300).nullish(), criticidadeSugerida: esquemaCriticidade.nullish(), ...camposSugeridos }))
+    .min(1, "Mande ao menos uma demanda.")
+    .max(100, "No máximo 100 demandas por envio."),
+});
+export type ReprocessoIntegracao = z.input<typeof esquemaReprocesso>["demandas"][number];
+export type ResultadoReprocesso = {
+  alteradas: number;
+  semMudanca: number;
+  recusadas: number;
+  demandas: { numero: number; mudou: string[]; preservado: string[]; aviso?: string; erro?: string }[];
+};
+
+/**
+ * PATCH /api/integracao/demandas: a rotina refaz a análise das demandas abertas. Título, situação, aguardando,
+ * condomínio e criticidade só mudam se nenhuma pessoa os mudou pela tela; pedido, "o que a DF faz" e próximo passo
+ * seguem a mesma regra (na primeira vez, ninguém os editou ainda). Concluída ou arquivada é recusada.
+ */
+export async function reprocessarDemandas(bruto: unknown): Promise<ResultadoReprocesso | { erro: string }> {
+  const v = esquemaReprocesso.safeParse(bruto);
+  if (!v.success) {
+    const i = v.error.issues[0];
+    return { erro: `Dados fora do formato${i?.path.length ? ` em ${i.path.join(".")}` : ""}: ${i?.message ?? "inválido"}.` };
+  }
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe("SELECT pg_advisory_xact_lock(72620311)");
+      const r: ResultadoReprocesso = { alteradas: 0, semMudanca: 0, recusadas: 0, demandas: [] };
+      const cadastro = await tx.condominio.findMany({ select: { id: true, nome: true }, orderBy: { nome: "asc" } });
+      for (const s of v.data.demandas) {
+        const d = await buscarDemanda(tx, { numero: s.numero });
+        if (!d || !estaAberta(d)) {
+          r.recusadas++;
+          r.demandas.push({ numero: s.numero, mudou: [], preservado: [], erro: d ? `Demanda ${ROTULO_SITUACAO[d.situacao].toLowerCase()}: só as abertas são reprocessadas.` : "Demanda não encontrada." });
+          continue;
+        }
+        let condominio: Sugestao["condominio"];
+        let aviso: string | undefined;
+        if (s.todaCarteira || (s.condominio && ehTodaCarteira(s.condominio))) condominio = { condominioId: null, todaCarteira: true, nome: null };
+        else if (s.condominio) {
+          const c = cadastro.find((x) => normalizarNome(x.nome) === normalizarNome(s.condominio!));
+          if (c) condominio = { condominioId: c.id, todaCarteira: false, nome: c.nome };
+          else aviso = `condomínio "${s.condominio}" não achado no cadastro`;
+        }
+        const res = await aplicarSugestoes(tx, d, {
+          titulo: s.titulo,
+          pedido: s.pedido,
+          oQueFazer: s.oQueFazer,
+          proximoPasso: s.proximoPasso,
+          situacao: s.situacaoSugerida,
+          aguardando: s.aguardando,
+          criticidade: s.criticidadeSugerida,
+          condominio,
+        });
+        r[res.mudou.length ? "alteradas" : "semMudanca"]++;
+        r.demandas.push({ numero: s.numero, ...res, ...(aviso ? { aviso } : {}) });
       }
       return r;
     },
@@ -293,6 +463,9 @@ export async function demandasAbertas(agora = new Date()) {
       numero: d.numero,
       titulo: d.titulo,
       condominio: nomeCondominio(d),
+      pedido: d.pedido,
+      oQueFazer: d.oQueFazer,
+      proximoPasso: d.proximoPasso,
       criticidade: d.criticidade,
       chegadaEm: d.chegadaEm.toISOString(),
       primeiraRespostaEm: d.primeiraRespostaEm?.toISOString() ?? null,
@@ -464,10 +637,13 @@ export async function registrarDemanda(email: string, entrada: unknown, agora = 
   });
 }
 
-export const CAMPOS_EDITAVEIS = ["titulo", "responsavel", "situacao", "aguardando", "criticidade", "condominioId", "prazoEmail", "prazoCombinado"] as const;
+export const CAMPOS_EDITAVEIS = ["titulo", "pedido", "oQueFazer", "proximoPasso", "responsavel", "situacao", "aguardando", "criticidade", "condominioId", "prazoEmail", "prazoCombinado"] as const;
 export type CampoDemanda = (typeof CAMPOS_EDITAVEIS)[number];
 const ROTULO_CAMPO: Record<CampoDemanda, string> = {
   titulo: "título",
+  pedido: "pedido",
+  oQueFazer: "o que a DF faz",
+  proximoPasso: "próximo passo",
   responsavel: "responsável",
   situacao: "situação",
   aguardando: "aguardando",
@@ -478,6 +654,9 @@ const ROTULO_CAMPO: Record<CampoDemanda, string> = {
 };
 const VALIDADORES: Record<CampoDemanda, z.ZodType<unknown>> = {
   titulo: z.string().trim().min(3, "Título curto demais.").max(300),
+  pedido: z.string().trim().max(5000).transform((t) => t || null),
+  oQueFazer: z.string().trim().max(2000).transform((t) => t || null),
+  proximoPasso: z.string().trim().max(500).transform((t) => t || null),
   responsavel: z.string().trim().max(300),
   // Arquivar tem motivo: só por arquivarDemanda.
   situacao: z.enum(["ABERTA", "EM_ANDAMENTO", "AGUARDANDO", "REUNIAO", "CONCLUIDA"], "Para arquivar, use “Arquivar” com o motivo."),
