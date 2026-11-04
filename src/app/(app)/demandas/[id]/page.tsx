@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { acaoAndamentoDemanda, acaoArquivarDemanda, acaoPrimeiraResposta } from "@/app/acoes";
-import { BotaoVoltar } from "@/components/botao-voltar";
 import { Etiqueta, PontoSituacao, botao, botaoPrimario, campo, eyebrow } from "@/components/demandas";
 import { BotaoSituacao, CampoDemanda } from "@/components/demandas-cliente";
 import { FormularioLinha } from "@/components/formulario-linha";
@@ -12,8 +11,11 @@ const COR_EVENTO = { RECEBIDA: "bg-atencao", ENVIADA_DF: "bg-ok", NOTA: "bg-info
 const ORIGEM_PRAZO = { email: "lido no e-mail", sla: "pelo SLA", combinado: "combinado com a BGRE", "a-combinar": "" } as const;
 
 /** Uma demanda: dados editáveis, conversa e histórico, andamento, 1ª resposta, concluir e arquivar. */
-export default async function DemandaPagina({ params }: { params: Promise<{ id: string }> }) {
+export default async function DemandaPagina({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ volta?: string }> }) {
   const { id } = await params;
+  // A lista manda os filtros e a ordem em ?volta=…; refeitos como parâmetros de busca, para nunca virar outro endereço.
+  const { volta } = await searchParams;
+  const lista = typeof volta === "string" && volta ? `/demandas?${new URLSearchParams(volta).toString()}` : "/demandas";
   const r = await carregarDemanda(id);
   if (!r) notFound();
   const { demanda: d } = r;
@@ -23,7 +25,9 @@ export default async function DemandaPagina({ params }: { params: Promise<{ id: 
 
   return (
     <>
-      <BotaoVoltar href="/demandas" />
+      <Link href={lista} className="w-fit text-[13.5px] text-suave hover:underline">
+        ← Voltar à lista
+      </Link>
       <div className="grid gap-1.5">
         <span className={eyebrow}>
           Demanda nº {d.numero} · {nomeCondominio(d) ?? "sem condomínio"}

@@ -1,23 +1,80 @@
 import Link from "next/link";
-import { AbasDemandas, Etiqueta, PontoSituacao, botao, botaoPrimario, eyebrow } from "@/components/demandas";
-import { FiltroSelect } from "@/components/demandas-cliente";
-import { INDICADORES, ROTULO_AGUARDANDO, ROTULO_SITUACAO, ROTULO_TODA_CARTEIRA, TODA_CARTEIRA, VISOES, nomeCondominio, listarDemandas, type Filtros, type Indicador, type Visao } from "@/lib/demandas";
-import { ROTULO_CRITICIDADE, diaHora, estaAberta } from "@/lib/prazos-demandas";
+import { AbasDemandas, Etiqueta, PontoSituacao, botao, botaoPrimario, campo, eyebrow } from "@/components/demandas";
+import { FiltrosRecolhiveis } from "@/components/demandas-cliente";
+import {
+  AGUARDANDO,
+  INDICADORES,
+  ROTULO_AGUARDANDO,
+  ROTULO_SITUACAO,
+  ROTULO_TODA_CARTEIRA,
+  TODA_CARTEIRA,
+  VISOES,
+  nomeCondominio,
+  listarDemandas,
+  type Filtros,
+  type Indicador,
+  type Visao,
+} from "@/lib/demandas";
+import { FILTROS_ORIGEM, FILTROS_PRAZO, FILTROS_RESPOSTA, NINGUEM, ORDENS, SENTIDO_PADRAO, contarFiltros, type Ordem } from "@/lib/filtros-demandas";
+import { CRITICIDADES, ROTULO_CRITICIDADE, diaHora, estaAberta } from "@/lib/prazos-demandas";
 
 const COR_INDICADOR: Record<Indicador, string> = { abertas: "border-t-marca", sem: "border-t-erro", vencidas: "border-t-erro", semana: "border-t-atencao", noprazo: "border-t-ok" };
+const CHAVES = ["vis", "cond", "resp", "kpi", "crit", "ag", "prazo", "resp1", "de", "ate", "origem", "q", "ord", "dir"] as const;
+type Chave = (typeof CHAVES)[number];
+const rotuloCampo = "grid min-w-0 gap-0.5 text-[12px] text-suave";
 
-/** Demandas da BGRE: indicadores, filtros e a tabela; cada linha abre a demanda. */
+/** Demandas da BGRE: indicadores, filtros, ordem e a tabela; cada linha abre a demanda (e volta com os mesmos filtros). */
 export default async function Demandas({ searchParams }: { searchParams: Promise<Filtros> }) {
   const f = await searchParams;
   const r = await listarDemandas(f);
-  const url = (mudar: Partial<Filtros>) => {
-    const p = new URLSearchParams();
-    for (const [k, v] of Object.entries({ vis: r.vis === "abertas" ? undefined : r.vis, cond: f.cond, resp: f.resp, kpi: r.kpi ?? undefined, ...mudar })) if (v) p.set(k, v);
-    const s = p.toString();
-    return s ? `/demandas?${s}` : "/demandas";
+  const fl = r.filtros;
+  // O estado da lista, só com o que vale (o padrão fica fora da URL).
+  const atual: Partial<Record<Chave, string>> = {
+    vis: r.vis === "abertas" ? undefined : r.vis,
+    cond: typeof f.cond === "string" ? f.cond || undefined : undefined,
+    resp: typeof f.resp === "string" ? f.resp || undefined : undefined,
+    kpi: r.kpi ?? undefined,
+    crit: fl.crit,
+    ag: fl.ag,
+    prazo: fl.prazo,
+    resp1: fl.resp1,
+    de: fl.de,
+    ate: fl.ate,
+    origem: fl.origem,
+    q: fl.q,
+    ord: fl.ord === "numero" ? undefined : fl.ord,
+    dir: fl.dir === SENTIDO_PADRAO[fl.ord] ? undefined : fl.dir,
   };
-  const exportar = url({}).replace("/demandas", "/demandas/exportar");
+  const consulta = (mudar: Partial<Record<Chave, string | undefined>> = {}) => {
+    const p = new URLSearchParams();
+    const tudo = { ...atual, ...mudar };
+    for (const k of CHAVES) if (tudo[k]) p.set(k, tudo[k]!);
+    return p.toString();
+  };
+  const url = (mudar: Partial<Record<Chave, string | undefined>> = {}) => {
+    const q = consulta(mudar);
+    return q ? `/demandas?${q}` : "/demandas";
+  };
+  const exportar = `/demandas/exportar${consulta() ? `?${consulta()}` : ""}`;
+  const volta = consulta();
+  const ativos = contarFiltros(fl) + [atual.cond, atual.resp, atual.kpi].filter(Boolean).length;
   const titulo = r.vis === "abertas" ? "Demandas em aberto" : `Demandas · ${VISOES[r.vis].toLowerCase()}`;
+
+  /** Cabeçalho que ordena: clicar de novo inverte o sentido; a seta mostra o sentido atual. */
+  const Ordena = ({ ord, children, className = "" }: { ord: Ordem; children: React.ReactNode; className?: string }) => {
+    const ativo = fl.ord === ord;
+    const dir = ativo ? (fl.dir === "asc" ? "desc" : "asc") : SENTIDO_PADRAO[ord];
+    return (
+      <th className={`px-2.5 py-2 ${className}`} aria-sort={ativo ? (fl.dir === "asc" ? "ascending" : "descending") : undefined}>
+        <Link href={url({ ord: ord === "numero" ? undefined : ord, dir: dir === SENTIDO_PADRAO[ord] ? undefined : dir })} className="inline-flex items-center gap-1 hover:underline">
+          {children}
+          <span aria-hidden="true" className={ativo ? "" : "opacity-40"}>
+            {ativo ? (fl.dir === "asc" ? "▲" : "▼") : "↕"}
+          </span>
+        </Link>
+      </th>
+    );
+  };
 
   return (
     <>
@@ -62,45 +119,175 @@ export default async function Demandas({ searchParams }: { searchParams: Promise
         })}
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
-        <div role="group" aria-label="Situação" className="flex flex-wrap border border-borda bg-superficie">
-          {(Object.keys(VISOES) as Visao[]).map((v) => (
-            <Link
-              key={v}
-              href={url({ vis: v === "abertas" ? undefined : v, kpi: undefined })}
-              aria-current={r.vis === v ? "true" : undefined}
-              className={`border-borda px-3 py-1.5 text-[13px] not-first:border-l ${r.vis === v ? "bg-marca font-bold text-marca-texto" : "text-texto hover:bg-superficie-2"}`}
-            >
-              {VISOES[v]}
-            </Link>
-          ))}
-        </div>
-        <FiltroSelect nome="cond" rotulo="Condomínio" opcoes={[[TODA_CARTEIRA, ROTULO_TODA_CARTEIRA], ...r.condominios, ["sem", "Sem condomínio"]]} />
-        <FiltroSelect nome="resp" rotulo="Responsável" opcoes={[...r.responsaveis.map((x): [string, string] => [x, x]), ["sem", "Sem responsável"]]} />
-        <span className="text-[12px] text-suave">
-          {r.linhas.length} {r.linhas.length === 1 ? "demanda" : "demandas"}
-          {r.kpi && (
-            <>
-              {" "}
-              · {INDICADORES[r.kpi].toLowerCase()} ·{" "}
-              <Link href={url({ kpi: undefined })} className="underline">
-                tirar filtro
-              </Link>
-            </>
-          )}
-        </span>
+      <div role="group" aria-label="Situação" className="flex w-fit max-w-full flex-wrap border border-borda bg-superficie">
+        {(Object.keys(VISOES) as Visao[]).map((v) => (
+          <Link
+            key={v}
+            href={url({ vis: v === "abertas" ? undefined : v, kpi: undefined })}
+            aria-current={r.vis === v ? "true" : undefined}
+            className={`border-borda px-3 py-1.5 text-[13px] not-first:border-l ${r.vis === v ? "bg-marca font-bold text-marca-texto" : "text-texto hover:bg-superficie-2"}`}
+          >
+            {VISOES[v]}
+          </Link>
+        ))}
       </div>
+
+      <FiltrosRecolhiveis rotulo={`Filtros e ordem${ativos ? ` (${ativos} ${ativos === 1 ? "ativo" : "ativos"})` : ""}`}>
+        <form method="get" action="/demandas" className="grid gap-2.5 border border-borda bg-superficie p-3">
+          {atual.vis && <input type="hidden" name="vis" value={atual.vis} />}
+          {atual.kpi && <input type="hidden" name="kpi" value={atual.kpi} />}
+          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 xl:grid-cols-6">
+            <label className={`${rotuloCampo} col-span-2`}>
+              Buscar (nº, título, pedido, o que fazer, remetente, assunto)
+              <input type="search" name="q" defaultValue={fl.q ?? ""} placeholder="Ex.: 41 ou laudo gerador" className={campo} />
+            </label>
+            <label className={rotuloCampo}>
+              Chegou de
+              <input type="date" name="de" defaultValue={fl.de ?? ""} className={campo} />
+            </label>
+            <label className={rotuloCampo}>
+              até
+              <input type="date" name="ate" defaultValue={fl.ate ?? ""} className={campo} />
+            </label>
+            <label className={rotuloCampo}>
+              Condomínio
+              <select name="cond" defaultValue={atual.cond ?? ""} className={campo}>
+                <option value="">Todos</option>
+                <option value={TODA_CARTEIRA}>{ROTULO_TODA_CARTEIRA}</option>
+                {r.condominios.map(([id, nome]) => (
+                  <option key={id} value={id}>
+                    {nome}
+                  </option>
+                ))}
+                <option value="sem">Sem condomínio</option>
+              </select>
+            </label>
+            <label className={rotuloCampo}>
+              Responsável
+              <select name="resp" defaultValue={atual.resp ?? ""} className={campo}>
+                <option value="">Todos</option>
+                {r.responsaveis.map((x) => (
+                  <option key={x} value={x}>
+                    {x}
+                  </option>
+                ))}
+                <option value="sem">Sem responsável</option>
+              </select>
+            </label>
+            <label className={rotuloCampo}>
+              Criticidade
+              <select name="crit" defaultValue={fl.crit ?? ""} className={campo}>
+                <option value="">Todas</option>
+                {CRITICIDADES.map((c) => (
+                  <option key={c} value={c}>
+                    {ROTULO_CRITICIDADE[c]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={rotuloCampo}>
+              Aguardando quem
+              <select name="ag" defaultValue={fl.ag ?? ""} className={campo}>
+                <option value="">Todos</option>
+                {AGUARDANDO.map((a) => (
+                  <option key={a} value={a}>
+                    {ROTULO_AGUARDANDO[a]}
+                  </option>
+                ))}
+                <option value={NINGUEM}>Ninguém</option>
+              </select>
+            </label>
+            <label className={rotuloCampo}>
+              Prazo
+              <select name="prazo" defaultValue={fl.prazo ?? ""} className={campo}>
+                <option value="">Todos</option>
+                {Object.entries(FILTROS_PRAZO).map(([v, t]) => (
+                  <option key={v} value={v}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={rotuloCampo}>
+              1ª resposta
+              <select name="resp1" defaultValue={fl.resp1 ?? ""} className={campo}>
+                <option value="">Todas</option>
+                {Object.entries(FILTROS_RESPOSTA).map(([v, t]) => (
+                  <option key={v} value={v}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={rotuloCampo}>
+              Origem
+              <select name="origem" defaultValue={fl.origem ?? ""} className={campo}>
+                <option value="">Todas</option>
+                {Object.entries(FILTROS_ORIGEM).map(([v, t]) => (
+                  <option key={v} value={v}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={rotuloCampo}>
+              Ordenar por
+              <select name="ord" defaultValue={fl.ord} className={campo}>
+                {Object.entries(ORDENS).map(([v, t]) => (
+                  <option key={v} value={v}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={rotuloCampo}>
+              Sentido
+              <select name="dir" defaultValue={atual.dir ?? ""} className={campo}>
+                <option value="">Padrão do campo</option>
+                <option value="asc">Crescente</option>
+                <option value="desc">Decrescente</option>
+              </select>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className={botaoPrimario}>Aplicar</button>
+            <Link href={url({ cond: undefined, resp: undefined, kpi: undefined, crit: undefined, ag: undefined, prazo: undefined, resp1: undefined, de: undefined, ate: undefined, origem: undefined, q: undefined, ord: undefined, dir: undefined })} className={botao}>
+              Limpar filtros
+            </Link>
+            <span className="text-[12px] text-suave">
+              Padrão: Nº mais novo primeiro. Prazo: mais urgente primeiro, sem prazo no fim. Clicar em Nº, Chegou ou Prazo na tabela também ordena.
+            </span>
+          </div>
+        </form>
+      </FiltrosRecolhiveis>
+
+      <p className="text-[12.5px] text-suave" role="status">
+        {ativos ? `${r.linhas.length} de ${r.totalVisao}` : r.linhas.length} {(ativos ? r.totalVisao : r.linhas.length) === 1 ? "demanda" : "demandas"}
+        {r.kpi && ` · ${INDICADORES[r.kpi].toLowerCase()}`} · ordem: {ORDENS[fl.ord].toLowerCase()} ({fl.dir === "asc" ? "crescente" : "decrescente"})
+        {ativos > 0 && (
+          <>
+            {" · "}
+            <Link href={url({ cond: undefined, resp: undefined, kpi: undefined, crit: undefined, ag: undefined, prazo: undefined, resp1: undefined, de: undefined, ate: undefined, origem: undefined, q: undefined })} className="underline">
+              limpar filtros
+            </Link>
+          </>
+        )}
+      </p>
 
       <div className="overflow-x-auto border border-borda bg-superficie">
         <table className="w-full border-collapse text-[13.5px]">
           <thead>
             <tr className="bg-marca text-left text-[12.5px] text-marca-texto">
-              <th className="px-2.5 py-2">Nº</th>
+              <Ordena ord="numero">Nº</Ordena>
               <th className="px-2.5 py-2">Demanda</th>
               <th className="px-2.5 py-2 max-md:hidden">Condomínio</th>
-              <th className="px-2.5 py-2 max-md:hidden">Chegou</th>
+              <Ordena ord="chegada" className="max-md:hidden">
+                Chegou
+              </Ordena>
               <th className="px-2.5 py-2 max-sm:hidden">1ª resposta</th>
-              <th className="px-2.5 py-2 max-sm:hidden">Prazo</th>
+              <Ordena ord="prazo" className="max-sm:hidden">
+                Prazo
+              </Ordena>
               <th className="px-2.5 py-2 max-sm:hidden">Situação</th>
             </tr>
           </thead>
@@ -109,7 +296,7 @@ export default async function Demandas({ searchParams }: { searchParams: Promise
               <tr key={d.id} className="border-t border-borda align-top hover:bg-superficie-2">
                 <td className="px-2.5 py-2 tabular-nums">{d.numero}</td>
                 <td className="min-w-40 px-2.5 py-2">
-                  <Link href={`/demandas/${d.id}`} className="font-bold hover:underline">
+                  <Link href={`/demandas/${d.id}${volta ? `?volta=${encodeURIComponent(volta)}` : ""}`} className="font-bold hover:underline">
                     {d.titulo}
                   </Link>
                   {d.oQueFazer && (
@@ -124,6 +311,7 @@ export default async function Demandas({ searchParams }: { searchParams: Promise
                   <span className="block text-[12px] text-suave md:hidden">
                     {nomeCondominio(d) ?? "sem condomínio"} · chegou {diaHora(d.chegadaEm)}
                   </span>
+                  {fl.ord === "movimento" && <span className="block text-[12px] text-suave">última movimentação {diaHora(d.ultimaMovimentacao)}</span>}
                   <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] sm:hidden">
                     <Etiqueta e={d.resposta} />
                     <Etiqueta e={d.prazo} />

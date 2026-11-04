@@ -410,3 +410,32 @@ describe("análise da Triagem: a tela manda, a rotina só sugere (decisões do u
     delete process.env.DEMANDAS_TOKEN;
   });
 });
+
+describe("lista com filtros, busca e ordem (pedido do usuário de 2026-11-04)", () => {
+  it("combina situação, filtros novos, busca e ordem; conta o total da visão; a última movimentação inclui o log", async () => {
+    await integrarMensagens({
+      mensagens: [
+        msg({ assunto: "Laudo do gerador", enviadoEm: "2026-10-30T16:42:00-03:00" }),
+        msg({ conversationId: "conv-2", internetMessageId: "<b@x>", assunto: "Seguro predial", criticidadeSugerida: "URGENTE", enviadoEm: "2026-11-02T10:00:00-03:00", prazo: null }),
+        msg({ conversationId: "conv-3", internetMessageId: "<c@x>", assunto: "Ata da assembleia", enviadoEm: "2026-10-28T09:00:00-03:00", prazo: null, aguardando: "LOCATARIO" }),
+      ],
+    });
+    const agora = new Date("2026-11-04T12:00:00Z");
+    const r = await listarDemandas({}, agora);
+    expect(r.linhas.map((l) => l.numero)).toEqual([...r.linhas.map((l) => l.numero)].sort((a, b) => b - a));
+    expect(r.totalVisao).toBe(3);
+    expect((await listarDemandas({ ord: "chegada", dir: "asc" }, agora)).linhas.map((l) => l.titulo)).toEqual(["Ata da assembleia", "Laudo do gerador", "Seguro predial"]);
+    expect((await listarDemandas({ q: "seguro" }, agora)).linhas.map((l) => l.titulo)).toEqual(["Seguro predial"]);
+    expect((await listarDemandas({ crit: "URGENTE", ag: "ninguem" }, agora)).linhas.map((l) => l.titulo)).toEqual(["Seguro predial"]);
+    expect((await listarDemandas({ ag: "LOCATARIO", cond: condominioId }, agora)).linhas.map((l) => l.titulo)).toEqual(["Ata da assembleia"]);
+
+    // Uma alteração pela tela na mais antiga faz dela a de movimentação mais recente.
+    const ata = await prisma.demanda.findFirstOrThrow({ where: { titulo: "Ata da assembleia" } });
+    await atualizarDemanda(EMAIL, ata.id, "responsavel", "pessoa@dfsindicos.com.br");
+    expect((await listarDemandas({ ord: "movimento" }, agora)).linhas[0]!.titulo).toBe("Ata da assembleia");
+    // Os indicadores continuam sobre todas, e o filtro combina com eles.
+    const k = await listarDemandas({ kpi: "sem", q: "laudo" }, agora);
+    expect(k.indicadores.sem).toBe(3);
+    expect(k.linhas.map((l) => l.titulo)).toEqual(["Laudo do gerador"]);
+  });
+});

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "./db";
 import { registrar, type Resposta, type Tx } from "./avaliacoes";
+import { filtrar, lerFiltros, ordenar } from "./filtros-demandas";
 import { normalizarNome } from "./importacao-json";
 import {
   CRITICIDADES,
@@ -495,7 +496,8 @@ export const INDICADORES = {
   noprazo: "Concluídas no prazo (30 dias)",
 } as const;
 export type Indicador = keyof typeof INDICADORES;
-export type Filtros = { vis?: string; cond?: string; resp?: string; kpi?: string };
+/** Parâmetros da URL da lista (os de sempre e os de src/lib/filtros-demandas.ts). */
+export type Filtros = { vis?: string; cond?: string; resp?: string; kpi?: string } & Record<string, string | string[] | undefined>;
 
 const DIA = 86_400_000;
 function predicado(k: Indicador, d: DemandaPrazo, cfg: ConfigSla, agora: Date) {
@@ -522,23 +524,38 @@ export async function listarDemandas(f: Filtros, agora = new Date()) {
   const kpi = f.kpi && f.kpi in INDICADORES ? (f.kpi as Indicador) : null;
   // "Concluídas no prazo" só existe entre as concluídas; os outros indicadores, entre as abertas.
   const vis: Visao = f.vis && f.vis in VISOES ? (f.vis as Visao) : kpi === "noprazo" ? "concluidas" : "abertas";
-  const [cfg, todas] = await Promise.all([
+  const filtros = lerFiltros(f);
+  const [cfg, todas, logs] = await Promise.all([
     carregarSla(),
-    prisma.demanda.findMany({ include: { condominio: { select: { id: true, nome: true } } }, orderBy: { chegadaEm: "desc" } }),
+    prisma.demanda.findMany({ include: { condominio: { select: { id: true, nome: true } }, mensagens: { select: { assunto: true, em: true } } }, orderBy: { numero: "desc" } }),
+    prisma.logAlteracao.groupBy({ by: ["entidadeId"], where: { entidade: "Demanda" }, _max: { em: true } }),
   ]);
+  const ultimoLog = new Map(logs.map((l) => [l.entidadeId, l._max.em]));
   const indicadores = Object.fromEntries((Object.keys(INDICADORES) as Indicador[]).map((k) => [k, todas.filter((d) => predicado(k, d, cfg, agora)).length])) as Record<Indicador, number>;
   const concluidas30 = todas.filter((d) => d.situacao === "CONCLUIDA" && d.concluidaEm && d.concluidaEm.getTime() >= agora.getTime() - 30 * DIA).length;
   const condominios = [...new Map(todas.filter((d) => d.condominio).map((d) => [d.condominio!.id, d.condominio!.nome])).entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
   const responsaveis = [...new Set(todas.map((d) => d.responsavel).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
-  const linhas = todas
-    .filter((d) => naVisao(vis, d.situacao))
+  const naVisaoAtual = todas.filter((d) => naVisao(vis, d.situacao));
+  const filtradas = naVisaoAtual
     .filter((d) => !f.cond || (f.cond === "sem" ? !d.condominioId && !d.todaCarteira : f.cond === TODA_CARTEIRA ? d.todaCarteira : d.condominioId === f.cond))
     .filter((d) => !f.resp || (f.resp === "sem" ? !d.responsavel : d.responsavel === f.resp))
     .filter((d) => !kpi || predicado(kpi, d, cfg, agora))
-    .map((d) => ({ ...d, resposta: situacaoResposta(d, cfg, agora), prazo: situacaoPrazo(d, cfg, agora), prazoEm: prazoConclusao(d, cfg) }))
-    // Vencendo (vermelho) primeiro; depois as mais novas.
-    .sort((a, b) => Number(b.prazo.tom === "erro") - Number(a.prazo.tom === "erro") || b.chegadaEm.getTime() - a.chegadaEm.getTime());
-  return { vis, kpi, indicadores, concluidas30, condominios, responsaveis, linhas, cfg };
+    .map((d) => {
+      const prazoEm = prazoConclusao(d, cfg);
+      const movimentos = [d.chegadaEm, ultimoLog.get(d.id), ...d.mensagens.map((m) => m.em)].filter((x): x is Date => !!x);
+      return {
+        ...d,
+        resposta: situacaoResposta(d, cfg, agora),
+        prazo: situacaoPrazo(d, cfg, agora),
+        prazoEm,
+        prazoLimite: prazoEm.em,
+        condominioNome: nomeCondominio(d),
+        assuntos: [...new Set(d.mensagens.map((m) => m.assunto).filter(Boolean))],
+        ultimaMovimentacao: new Date(Math.max(...movimentos.map((x) => x.getTime()))),
+      };
+    });
+  const linhas = ordenar(filtrar(filtradas, filtros, agora), filtros.ord, filtros.dir);
+  return { vis, kpi, filtros, totalVisao: naVisaoAtual.length, indicadores, concluidas30, condominios, responsaveis, linhas, cfg };
 }
 
 /** Página /demandas/[id]: a demanda, a conversa e o histórico (LogAlteracao), numa linha do tempo. */

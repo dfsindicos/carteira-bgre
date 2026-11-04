@@ -1,34 +1,30 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { acaoCampoDemanda, acaoReabrirDemanda } from "@/app/acoes";
 
-/** Filtro da lista (condomínio, responsável): muda a URL ao escolher, sem botão. */
-export function FiltroSelect({ nome, rotulo, opcoes }: { nome: string; rotulo: string; opcoes: [string, string][] }) {
-  const router = useRouter();
-  const busca = useSearchParams();
+/**
+ * "Filtros e ordem": recolhido no celular; aberto sozinho em tela de 768 px ou mais. Sem JavaScript, fica recolhido e
+ * abre ao tocar (o formulário é GET e funciona igual).
+ */
+export function FiltrosRecolhiveis({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (ref.current && window.matchMedia("(min-width: 768px)").matches) ref.current.open = true;
+  }, []);
   return (
-    <label className="flex items-center gap-1.5 text-[13px] text-suave">
-      {rotulo}
-      <select
-        value={busca.get(nome) ?? ""}
-        onChange={(e) => {
-          const p = new URLSearchParams(busca.toString());
-          if (e.target.value) p.set(nome, e.target.value);
-          else p.delete(nome);
-          router.push(`/demandas?${p.toString()}`);
-        }}
-        className="min-h-9 max-w-52 border border-borda bg-superficie px-2 text-[14px] text-texto"
-      >
-        <option value="">Todos</option>
-        {opcoes.map(([v, t]) => (
-          <option key={v} value={v}>
-            {t}
-          </option>
-        ))}
-      </select>
-    </label>
+    <details
+      ref={ref}
+      className="group grid gap-2"
+      // Campo vazio não vai para a URL (?q=&cond=…): desligado no envio, não é enviado.
+      onSubmitCapture={(e) => {
+        for (const el of (e.target as HTMLFormElement).elements)
+          if ((el instanceof HTMLInputElement || el instanceof HTMLSelectElement) && el.name && !el.value) el.disabled = true;
+      }}
+    >
+      <summary className="w-fit cursor-pointer border border-borda bg-superficie px-3 py-1.5 text-[13px] font-bold text-titulo">{rotulo}</summary>
+      <div className="mt-2">{children}</div>
+    </details>
   );
 }
 

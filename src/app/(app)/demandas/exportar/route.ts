@@ -6,11 +6,11 @@ import { sessaoAtual } from "@/lib/sessao";
 
 export const dynamic = "force-dynamic";
 
-/** "Exportar Excel": as demandas do filtro da página (mesmos parâmetros vis, cond, resp e kpi). */
+/** "Exportar Excel": as demandas do filtro da página, na mesma ordem. */
 export async function GET(req: Request) {
   await sessaoAtual(); // o middleware já exige login; aqui confere de novo, por ser download de dado
-  const p = new URL(req.url).searchParams;
-  const { linhas } = await listarDemandas({ vis: p.get("vis") ?? undefined, cond: p.get("cond") ?? undefined, resp: p.get("resp") ?? undefined, kpi: p.get("kpi") ?? undefined });
+  // Os mesmos parâmetros da página (situação, filtros, busca e ordem): a planilha sai como a lista está na tela.
+  const { linhas } = await listarDemandas(Object.fromEntries(new URL(req.url).searchParams));
   const nome = `Demandas-BGRE-${dataSP(new Date())}.xlsx`;
   return new NextResponse(new Uint8Array(await planilhaDemandas(linhas)), {
     headers: {
