@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AbasDemandas, Etiqueta, PontoSituacao, botao, botaoPrimario, eyebrow } from "@/components/demandas";
 import { FiltroSelect } from "@/components/demandas-cliente";
-import { INDICADORES, ROTULO_AGUARDANDO, ROTULO_SITUACAO, VISOES, listarDemandas, type Filtros, type Indicador, type Visao } from "@/lib/demandas";
+import { INDICADORES, ROTULO_AGUARDANDO, ROTULO_SITUACAO, ROTULO_TODA_CARTEIRA, TODA_CARTEIRA, VISOES, nomeCondominio, listarDemandas, type Filtros, type Indicador, type Visao } from "@/lib/demandas";
 import { ROTULO_CRITICIDADE, diaHora, estaAberta } from "@/lib/prazos-demandas";
 
 const COR_INDICADOR: Record<Indicador, string> = { abertas: "border-t-marca", sem: "border-t-erro", vencidas: "border-t-erro", semana: "border-t-atencao", noprazo: "border-t-ok" };
@@ -75,7 +75,7 @@ export default async function Demandas({ searchParams }: { searchParams: Promise
             </Link>
           ))}
         </div>
-        <FiltroSelect nome="cond" rotulo="Condomínio" opcoes={[...r.condominios, ["sem", "Sem condomínio"]]} />
+        <FiltroSelect nome="cond" rotulo="Condomínio" opcoes={[[TODA_CARTEIRA, ROTULO_TODA_CARTEIRA], ...r.condominios, ["sem", "Sem condomínio"]]} />
         <FiltroSelect nome="resp" rotulo="Responsável" opcoes={[...r.responsaveis.map((x): [string, string] => [x, x]), ["sem", "Sem responsável"]]} />
         <span className="text-[12px] text-suave">
           {r.linhas.length} {r.linhas.length === 1 ? "demanda" : "demandas"}
@@ -117,7 +117,7 @@ export default async function Demandas({ searchParams }: { searchParams: Promise
                     {d.responsavel ? d.responsavel : <b>sem responsável</b>}
                   </span>
                   <span className="block text-[12px] text-suave md:hidden">
-                    {d.condominio?.nome ?? "sem condomínio"} · chegou {diaHora(d.chegadaEm)}
+                    {nomeCondominio(d) ?? "sem condomínio"} · chegou {diaHora(d.chegadaEm)}
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] sm:hidden">
                     <Etiqueta e={d.resposta} />
@@ -125,7 +125,7 @@ export default async function Demandas({ searchParams }: { searchParams: Promise
                     <PontoSituacao situacao={d.situacao} rotulo={ROTULO_SITUACAO[d.situacao]} />
                   </span>
                 </td>
-                <td className="px-2.5 py-2 max-md:hidden">{d.condominio?.nome ?? <span className="text-suave">—</span>}</td>
+                <td className="px-2.5 py-2 max-md:hidden">{nomeCondominio(d) ?? <span className="text-suave">—</span>}</td>
                 <td className="px-2.5 py-2 whitespace-nowrap tabular-nums max-md:hidden">{diaHora(d.chegadaEm)}</td>
                 <td className="px-2.5 py-2 max-sm:hidden">
                   <Etiqueta e={d.resposta} />

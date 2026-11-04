@@ -122,7 +122,8 @@ export type DemandaPrazo = {
   concluidaEm: Date | null;
 };
 
-export const SITUACOES_ABERTAS = ["ABERTA", "EM_ANDAMENTO", "AGUARDANDO"];
+// Reunião (agendamento) conta como aberta em tudo: indicadores, filtro "Em aberto", GET ?abertas=1 e Excel.
+export const SITUACOES_ABERTAS = ["ABERTA", "EM_ANDAMENTO", "AGUARDANDO", "REUNIAO"];
 export const estaAberta = (d: { situacao: string }) => SITUACOES_ABERTAS.includes(d.situacao);
 
 export const prazoResposta = (d: DemandaPrazo, cfg: ConfigSla) => limite(d.chegadaEm, cfg.regras[d.criticidade].resposta, cfg.contarFeriados);

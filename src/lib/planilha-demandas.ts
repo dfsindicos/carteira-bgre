@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { ROTULO_AGUARDANDO, ROTULO_SITUACAO, type listarDemandas } from "./demandas";
+import { ROTULO_AGUARDANDO, ROTULO_SITUACAO, nomeCondominio, type listarDemandas } from "./demandas";
 import { ROTULO_CRITICIDADE } from "./prazos-demandas";
 
 // "Exportar Excel" da página Demandas: as linhas do filtro atual, no padrão de planilha da DF (Calibri 10, cabeçalho
@@ -44,7 +44,7 @@ export async function planilhaDemandas(linhas: Linha[]): Promise<Buffer> {
       d.titulo,
       d.remetenteNome,
       d.remetenteEmail,
-      d.condominio?.nome ?? "",
+      nomeCondominio(d) ?? "",
       ROTULO_CRITICIDADE[d.criticidade],
       sp(d.chegadaEm),
       sp(d.primeiraRespostaEm),

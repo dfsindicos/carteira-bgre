@@ -9,6 +9,7 @@ import {
   UNIDADES,
   descreverRegra,
   diaHora,
+  SITUACOES_ABERTAS,
   estaAberta,
   lerDataHoraSP,
   prazoConclusao,
@@ -24,18 +25,28 @@ import {
 // DF e grava por /api/integracao/demandas (integrarMensagens); a DF trabalha em /demandas. As regras
 // recebem o e-mail de quem mexe (as server actions só leem a sessão) e toda alteração grava LogAlteracao.
 
-export const SITUACOES = ["ABERTA", "EM_ANDAMENTO", "AGUARDANDO", "CONCLUIDA", "ARQUIVADA"] as const;
+export const SITUACOES = ["ABERTA", "EM_ANDAMENTO", "AGUARDANDO", "REUNIAO", "CONCLUIDA", "ARQUIVADA"] as const;
 export type Situacao = (typeof SITUACOES)[number];
 export const ROTULO_SITUACAO: Record<Situacao, string> = {
   ABERTA: "Aberta",
   EM_ANDAMENTO: "Em andamento",
   AGUARDANDO: "Aguardando",
+  REUNIAO: "Reunião",
   CONCLUIDA: "Concluída",
   ARQUIVADA: "Arquivada",
 };
 export const AGUARDANDO = ["DF", "BGRE", "ADMINISTRADORA", "LOCATARIO", "CORRETORA", "FORNECEDOR"] as const;
 export type Aguardando = (typeof AGUARDANDO)[number];
 export const ROTULO_AGUARDANDO: Record<Aguardando, string> = { DF: "DF", BGRE: "BGRE", ADMINISTRADORA: "Administradora", LOCATARIO: "Locatário", CORRETORA: "Corretora", FORNECEDOR: "Fornecedor" };
+
+/** Valor do select e do filtro para "Toda a carteira" (Demanda.todaCarteira; pedido do usuário de 2026-11-04). */
+export const TODA_CARTEIRA = "toda-carteira";
+export const ROTULO_TODA_CARTEIRA = "Toda a carteira";
+/** Nome do condomínio da demanda para as telas, o Excel e a integração. */
+export const nomeCondominio = (d: { todaCarteira: boolean; condominio: { nome: string } | null }) => (d.todaCarteira ? ROTULO_TODA_CARTEIRA : (d.condominio?.nome ?? null));
+// Como a Triagem pode escrever "toda a carteira" no campo condominio (normalizado por normalizarNome).
+const NOMES_TODA_CARTEIRA = new Set(["toda a carteira", "toda carteira", "todos", "todos os condominios", "portfolio", "todo o portfolio"]);
+export const ehTodaCarteira = (nome: string) => NOMES_TODA_CARTEIRA.has(normalizarNome(nome));
 
 /** Quem grava pela integração, no LogAlteracao. */
 export const ROTINA = "rotina Triagem Contratante";
@@ -140,6 +151,8 @@ const esquemaMensagem = z.object({
   criticidadeSugerida: esquemaCriticidade.nullish(),
   prazo: z.iso.date().nullish(),
   condominio: z.string().max(300).nullish(),
+  // Convite ou agendamento de reunião: a demanda nova nasce com a situação Reunião (não muda demanda existente).
+  reuniao: z.boolean().nullish(),
   responsavel: z.string().trim().max(300).nullish(),
   origemPlanner: z.string().max(5000).nullish(),
 });
@@ -211,13 +224,16 @@ export async function integrarMensagens(bruto: unknown): Promise<ResultadoIntegr
             r.mensagens.push({ internetMessageId: m.internetMessageId, acao: "ignorada" });
             continue;
           }
-          const condominioId = m.condominio ? (porNome.get(normalizarNome(m.condominio)) ?? null) : null;
+          const todaCarteira = !!m.condominio && ehTodaCarteira(m.condominio);
+          const condominioId = m.condominio && !todaCarteira ? (porNome.get(normalizarNome(m.condominio)) ?? null) : null;
           const nova = await tx.demanda.create({
             data: {
               titulo: (limparAssunto(m.assunto) || m.resumo.slice(0, 120) || "(sem assunto)").slice(0, 300),
               remetenteNome: m.remetenteNome,
               remetenteEmail: m.remetenteEmail,
               condominioId,
+              todaCarteira,
+              situacao: m.reuniao ? "REUNIAO" : "ABERTA",
               criticidade: m.criticidadeSugerida ?? "ORDINARIA",
               chegadaEm: enviadoEm,
               prazoEmail: m.prazo ? dataDe(m.prazo) : null,
@@ -229,7 +245,7 @@ export async function integrarMensagens(bruto: unknown): Promise<ResultadoIntegr
               mensagens: { create: mensagem },
             },
           });
-          await registrar(tx, ROTINA, "Demanda", nova.id, "criada", null, `nº ${nova.numero} · ${nova.titulo}${m.condominio && !condominioId ? ` · condomínio "${m.condominio}" não achado no cadastro` : ""}`);
+          await registrar(tx, ROTINA, "Demanda", nova.id, "criada", null, `nº ${nova.numero} · ${nova.titulo}${m.condominio && !condominioId && !todaCarteira ? ` · condomínio "${m.condominio}" não achado no cadastro` : ""}`);
           r.criadas++;
           r.mensagens.push({ internetMessageId: m.internetMessageId, acao: "criada", numero: nova.numero });
           continue;
@@ -267,7 +283,7 @@ export async function integrarMensagens(bruto: unknown): Promise<ResultadoIntegr
 export async function demandasAbertas(agora = new Date()) {
   const [cfg, lista] = await Promise.all([
     carregarSla(),
-    prisma.demanda.findMany({ where: { situacao: { in: ["ABERTA", "EM_ANDAMENTO", "AGUARDANDO"] } }, include: { condominio: { select: { nome: true } } }, orderBy: { numero: "asc" } }),
+    prisma.demanda.findMany({ where: { situacao: { in: SITUACOES_ABERTAS as Situacao[] } }, include: { condominio: { select: { nome: true } } }, orderBy: { numero: "asc" } }),
   ]);
   const app = (process.env.APP_URL ?? "").replace(/\/$/, "");
   return lista.map((d) => {
@@ -276,7 +292,7 @@ export async function demandasAbertas(agora = new Date()) {
     return {
       numero: d.numero,
       titulo: d.titulo,
-      condominio: d.condominio?.nome ?? null,
+      condominio: nomeCondominio(d),
       criticidade: d.criticidade,
       chegadaEm: d.chegadaEm.toISOString(),
       primeiraRespostaEm: d.primeiraRespostaEm?.toISOString() ?? null,
@@ -296,7 +312,7 @@ export async function demandasAbertas(agora = new Date()) {
 
 // ── Telas ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export const VISOES = { abertas: "Em aberto", aguardando: "Aguardando terceiros", concluidas: "Concluídas", arquivadas: "Arquivadas", todas: "Todas" } as const;
+export const VISOES = { abertas: "Em aberto", aguardando: "Aguardando terceiros", reuniao: "Reunião", concluidas: "Concluídas", arquivadas: "Arquivadas", todas: "Todas" } as const;
 export type Visao = keyof typeof VISOES;
 export const INDICADORES = {
   abertas: "Em aberto",
@@ -326,7 +342,7 @@ function predicado(k: Indicador, d: DemandaPrazo, cfg: ConfigSla, agora: Date) {
 }
 
 const naVisao = (vis: Visao, s: string) =>
-  vis === "todas" ? true : vis === "abertas" ? estaAberta({ situacao: s }) : vis === "aguardando" ? s === "AGUARDANDO" : vis === "concluidas" ? s === "CONCLUIDA" : s === "ARQUIVADA";
+  vis === "todas" ? true : vis === "abertas" ? estaAberta({ situacao: s }) : vis === "aguardando" ? s === "AGUARDANDO" : vis === "reuniao" ? s === "REUNIAO" : vis === "concluidas" ? s === "CONCLUIDA" : s === "ARQUIVADA";
 
 /** Página /demandas: indicadores (sobre todas), opções dos filtros e as linhas filtradas, já com as etiquetas de prazo. */
 export async function listarDemandas(f: Filtros, agora = new Date()) {
@@ -343,7 +359,7 @@ export async function listarDemandas(f: Filtros, agora = new Date()) {
   const responsaveis = [...new Set(todas.map((d) => d.responsavel).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
   const linhas = todas
     .filter((d) => naVisao(vis, d.situacao))
-    .filter((d) => !f.cond || (f.cond === "sem" ? !d.condominioId : d.condominioId === f.cond))
+    .filter((d) => !f.cond || (f.cond === "sem" ? !d.condominioId && !d.todaCarteira : f.cond === TODA_CARTEIRA ? d.todaCarteira : d.condominioId === f.cond))
     .filter((d) => !f.resp || (f.resp === "sem" ? !d.responsavel : d.responsavel === f.resp))
     .filter((d) => !kpi || predicado(kpi, d, cfg, agora))
     .map((d) => ({ ...d, resposta: situacaoResposta(d, cfg, agora), prazo: situacaoPrazo(d, cfg, agora), prazoEm: prazoConclusao(d, cfg) }))
@@ -408,6 +424,7 @@ const esquemaNova = z.object({
     return d ?? new Date(0);
   }),
   criticidade: esquemaCriticidade,
+  // Id do condomínio, TODA_CARTEIRA ou vazio.
   condominioId: z.string().max(100).default(""),
   prazoEmail: dataOuNula,
   responsavel: z.string().trim().max(300).default(""),
@@ -421,6 +438,8 @@ export async function registrarDemanda(email: string, entrada: unknown, agora = 
   if (!e.success) return falha(e.error.issues[0]?.message ?? "Dados inválidos.");
   const n = e.data;
   if (n.chegadaEm.getTime() > agora.getTime() + 5 * 60_000) return falha("A chegada não pode ser no futuro.");
+  const todaCarteira = n.condominioId === TODA_CARTEIRA;
+  if (todaCarteira) n.condominioId = "";
   if (n.condominioId && !(await prisma.condominio.findUnique({ where: { id: n.condominioId } }))) return falha("Condomínio não encontrado.");
   return prisma.$transaction(async (tx) => {
     const d = await tx.demanda.create({
@@ -429,6 +448,7 @@ export async function registrarDemanda(email: string, entrada: unknown, agora = 
         remetenteNome: n.remetenteNome,
         remetenteEmail: n.remetenteEmail.toLowerCase(),
         condominioId: n.condominioId || null,
+        todaCarteira,
         criticidade: n.criticidade,
         chegadaEm: n.chegadaEm,
         prazoEmail: n.prazoEmail,
@@ -460,7 +480,7 @@ const VALIDADORES: Record<CampoDemanda, z.ZodType<unknown>> = {
   titulo: z.string().trim().min(3, "Título curto demais.").max(300),
   responsavel: z.string().trim().max(300),
   // Arquivar tem motivo: só por arquivarDemanda.
-  situacao: z.enum(["ABERTA", "EM_ANDAMENTO", "AGUARDANDO", "CONCLUIDA"], "Para arquivar, use “Arquivar” com o motivo."),
+  situacao: z.enum(["ABERTA", "EM_ANDAMENTO", "AGUARDANDO", "REUNIAO", "CONCLUIDA"], "Para arquivar, use “Arquivar” com o motivo."),
   aguardando: z.union([z.literal("").transform(() => null), z.enum(AGUARDANDO)]),
   criticidade: esquemaCriticidade,
   condominioId: z.string().max(100).transform((s) => s || null),
@@ -481,14 +501,18 @@ export async function atualizarDemanda(email: string, id: string, campo: string,
     const d = await tx.demanda.findUnique({ where: { id }, include: { condominio: { select: { nome: true } } } });
     if (!d) return falha("Demanda não encontrada.");
     if (d.situacao === "ARQUIVADA") return falha("Demanda arquivada: reabra antes de mudar.");
-    const antes = d[c];
+    // "Toda a carteira" é o valor TODA_CARTEIRA no select: grava todaCarteira e deixa condominioId nulo.
+    const antes = c === "condominioId" && d.todaCarteira ? TODA_CARTEIRA : d[c];
     if (paraLog(c, antes) === paraLog(c, novo)) return { ok: true as const };
     const data: Record<string, unknown> = { [c]: novo };
     let [logAntes, logDepois] = [paraLog(c, antes), paraLog(c, novo)];
     if (c === "condominioId") {
-      const cond = novo ? await tx.condominio.findUnique({ where: { id: novo as string }, select: { nome: true } }) : null;
-      if (novo && !cond) return falha("Condomínio não encontrado.");
-      [logAntes, logDepois] = [d.condominio?.nome ?? null, cond?.nome ?? null];
+      const toda = novo === TODA_CARTEIRA;
+      const cond = novo && !toda ? await tx.condominio.findUnique({ where: { id: novo as string }, select: { nome: true } }) : null;
+      if (novo && !toda && !cond) return falha("Condomínio não encontrado.");
+      data.condominioId = toda ? null : novo;
+      data.todaCarteira = toda;
+      [logAntes, logDepois] = [nomeCondominio(d), toda ? ROTULO_TODA_CARTEIRA : (cond?.nome ?? null)];
     }
     if (c === "situacao") {
       if (novo === "CONCLUIDA") data.concluidaEm = agora;

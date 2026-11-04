@@ -108,7 +108,7 @@ Segunda parte da tela **Importar**, rota `/api/importar/json` (JSON, sessão, me
 - Conferência feita em 2026-10-27 com os modelos reais de um prédio da carteira (Administração e Sindicância), abrindo no LibreOffice com recálculo: índices por bloco e avaliação final saem das fórmulas da BGRE.
 
 ## Demandas da BGRE
-- **Tela:** `/demandas` (menu "Demandas"): indicadores (em aberto, sem 1ª resposta, prazo vencido, vencem em 7 dias, concluídas no prazo nos últimos 30 dias; clicar filtra), filtros por situação, condomínio e responsável, tabela e "Exportar Excel" (`/demandas/exportar`, com os mesmos filtros). Cada demanda abre em `/demandas/<id>`: criticidade, responsável, situação, aguardando quem, condomínio, prazo do e-mail e prazo combinado gravam ao mudar; "Registrar andamento", "Marcar 1ª resposta" (agora ou no horário informado), "Concluir", "Arquivar" (com motivo) e "Reabrir"; link do e-mail no Outlook. "Registrar demanda" (`/demandas/nova`) para o que chegou por telefone, reunião ou WhatsApp, com o horário em que chegou.
+- **Tela:** `/demandas` (menu "Demandas"): indicadores (em aberto, sem 1ª resposta, prazo vencido, vencem em 7 dias, concluídas no prazo nos últimos 30 dias; clicar filtra), filtros por situação, condomínio e responsável, tabela e "Exportar Excel" (`/demandas/exportar`, com os mesmos filtros). Cada demanda abre em `/demandas/<id>`: criticidade, responsável, situação, aguardando quem, condomínio, prazo do e-mail e prazo combinado gravam ao mudar; "Registrar andamento", "Marcar 1ª resposta" (agora ou no horário informado), "Concluir", "Arquivar" (com motivo) e "Reabrir"; link do e-mail no Outlook. Situações: Aberta, Em andamento, Aguardando, **Reunião** (agendamento de reunião; conta como aberta em tudo: indicadores, "Em aberto", Excel e GET), Concluída e Arquivada; a lista tem o filtro "Reunião" ao lado de "Aguardando terceiros". "Aguardando quem": DF, BGRE, Administradora, Locatário, Corretora, Fornecedor. Condomínio: um do cadastro, **"Toda a carteira"** (demanda que envolve todos os condomínios BGRE; `todaCarteira`, sem condomínio ligado) ou vazio; o filtro "Sem condomínio" não inclui as de toda a carteira. "Registrar demanda" (`/demandas/nova`) para o que chegou por telefone, reunião ou WhatsApp, com o horário em que chegou.
 - **SLA:** `/demandas/sla`. Padrão (o do Einstein): Crítica 1 h corrida / 4 h corridas (plano de ação); Urgente 4 h / 1 dia útil; Ordinária 1 du / 5 du; Complexa 2 du / prazo combinado (até 10 du). Dias úteis mantêm o horário e pulam sábado, domingo e (com a opção marcada) os feriados nacionais e de São Paulo; chegada em dia não útil conta das 8h do próximo dia útil. O prazo escrito no e-mail vale até 23h59 daquele dia e, com a opção marcada, prevalece sobre a conclusão do SLA. Em "prazo combinado", a conclusão é o "prazo combinado" anotado na demanda (sem ele, o do e-mail; sem nenhum, "a combinar"). Mudar o SLA recalcula as abertas.
 - **Integração (Triagem Contratante):** `https://bgre.gestaodfsindicos.tech/api/integracao/demandas`, cabeçalho `Authorization: Bearer $DEMANDAS_TOKEN`. Sem o segredo no servidor: 503; senha errada: 401.
   - **POST** (JSON, até 5 MB, com `Content-Length`), lote de 1 a 100 mensagens:
@@ -125,7 +125,10 @@ Segunda parte da tela **Importar**, rota `/api/importar/json` (JSON, sessão, me
         "demanda": true,                          // false = informativo: só registra se já houver demanda na conversa
         "criticidadeSugerida": "ORDINARIA",       // opcional: CRITICA, URGENTE, ORDINARIA, COMPLEXA (aceita "Ordinária"); padrão ORDINARIA
         "prazo": "2026-11-05",                    // opcional: prazo escrito no e-mail (AAAA-MM-DD)
-        "condominio": "Nome do prédio",           // opcional: casado pelo nome sem acento, caixa, pontuação e parênteses; sem achar = vazio
+        "condominio": "Nome do prédio",           // opcional: casado pelo nome sem acento, caixa, pontuação e parênteses; sem achar = vazio.
+                                                  // "Toda a carteira", "todos", "todos os condomínios" ou "portfólio" = toda a carteira
+        "reuniao": false,                         // opcional: true = convite/agendamento de reunião; a demanda NOVA nasce com a situação Reunião
+                                                  // (numa demanda que já existe, não muda a situação)
         "responsavel": "pessoa@dfsindicos.com.br", // opcional, só na criação (carga do Planner)
         "origemPlanner": "[BGRE] título do card"  // opcional: carga única dos cards antigos (origem PLANNER)
     } ] }
@@ -136,12 +139,12 @@ Segunda parte da tela **Importar**, rota `/api/importar/json` (JSON, sessão, me
       "mensagens": [ { "internetMessageId": "<abc@exemplo>", "acao": "criada" | "atualizacao" | "duplicada" | "ignorada", "numero": 41 } ] }
     ```
     422 diz o campo fora do formato (`{ "erro": "Dados fora do formato em mensagens.0.enviadoEm: …" }`); 413 sem `Content-Length` ou acima de 5 MB.
-  - **GET** `?abertas=1` (para o e-mail diário [Triagem]): as demandas abertas (Aberta, Em andamento, Aguardando), por número:
+  - **GET** `?abertas=1` (para o e-mail diário [Triagem]): as demandas abertas (Aberta, Em andamento, Aguardando, Reunião), por número; `condominio` traz "Toda a carteira" nas de toda a carteira:
     ```
     { "demandas": [ { "numero": 41, "titulo": "…", "condominio": "…" | null, "criticidade": "URGENTE",
         "chegadaEm": "ISO", "primeiraRespostaEm": "ISO" | null, "primeiraRespostaAte": "ISO" | null,
         "prazo": "ISO" | null, "prazoOrigem": "email" | "sla" | "combinado" | "a-combinar", "vencida": false,
-        "situacao": "ABERTA", "situacaoPrazo": "Vence 05/11", "aguardando": "DF" | null, "responsavel": "…" | null,
+        "situacao": "ABERTA" | "EM_ANDAMENTO" | "AGUARDANDO" | "REUNIAO", "situacaoPrazo": "Vence 05/11", "aguardando": "DF" | null, "responsavel": "…" | null,
         "link": "https://outlook…" | null, "pagina": "https://bgre.gestaodfsindicos.tech/demandas/<id>" } ] }
     ```
   - Exemplo: `curl -sf -X POST -H "Authorization: Bearer $DEMANDAS_TOKEN" -H "Content-Type: application/json" --data-binary @/tmp/lote.json https://bgre.gestaodfsindicos.tech/api/integracao/demandas`.

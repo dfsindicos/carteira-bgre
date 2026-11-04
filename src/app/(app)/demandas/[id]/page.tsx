@@ -5,7 +5,7 @@ import { BotaoVoltar } from "@/components/botao-voltar";
 import { Etiqueta, PontoSituacao, botao, botaoPrimario, campo, eyebrow } from "@/components/demandas";
 import { BotaoSituacao, CampoDemanda } from "@/components/demandas-cliente";
 import { FormularioLinha } from "@/components/formulario-linha";
-import { AGUARDANDO, ROTULO_AGUARDANDO, ROTULO_SITUACAO, carregarDemanda } from "@/lib/demandas";
+import { AGUARDANDO, ROTULO_AGUARDANDO, ROTULO_SITUACAO, ROTULO_TODA_CARTEIRA, TODA_CARTEIRA, carregarDemanda, nomeCondominio } from "@/lib/demandas";
 import { CRITICIDADES, ROTULO_CRITICIDADE, diaHora, diaMes, estaAberta, paraDataHoraSP } from "@/lib/prazos-demandas";
 
 const COR_EVENTO = { RECEBIDA: "bg-atencao", ENVIADA_DF: "bg-ok", NOTA: "bg-info", LOG: "bg-suave" } as const;
@@ -26,7 +26,7 @@ export default async function DemandaPagina({ params }: { params: Promise<{ id: 
       <BotaoVoltar href="/demandas" />
       <div className="grid gap-1.5">
         <span className={eyebrow}>
-          Demanda nº {d.numero} · {d.condominio?.nome ?? "sem condomínio"}
+          Demanda nº {d.numero} · {nomeCondominio(d) ?? "sem condomínio"}
         </span>
         <h1 className="text-2xl leading-tight font-bold">{d.titulo}</h1>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -93,7 +93,7 @@ export default async function DemandaPagina({ params }: { params: Promise<{ id: 
                     campo="situacao"
                     rotulo="Situação"
                     valor={d.situacao}
-                    opcoes={(["ABERTA", "EM_ANDAMENTO", "AGUARDANDO", "CONCLUIDA"] as const).map((s) => [s, ROTULO_SITUACAO[s]])}
+                    opcoes={(["ABERTA", "EM_ANDAMENTO", "AGUARDANDO", "REUNIAO", "CONCLUIDA"] as const).map((s) => [s, ROTULO_SITUACAO[s]])}
                   />
                 )}
               </dd>
@@ -114,9 +114,9 @@ export default async function DemandaPagina({ params }: { params: Promise<{ id: 
                   id={d.id}
                   campo="condominioId"
                   rotulo="Condomínio"
-                  valor={d.condominioId ?? ""}
+                  valor={d.todaCarteira ? TODA_CARTEIRA : (d.condominioId ?? "")}
                   desabilitado={arquivada}
-                  opcoes={[["", "— sem condomínio —"], ...r.condominios.map((c): [string, string] => [c.id, c.nome])]}
+                  opcoes={[["", "— sem condomínio —"], [TODA_CARTEIRA, ROTULO_TODA_CARTEIRA], ...r.condominios.map((c): [string, string] => [c.id, c.nome])]}
                 />
               </dd>
               <dt className="text-suave">Prazo do e-mail</dt>

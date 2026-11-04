@@ -246,3 +246,74 @@ describe("demandas pela tela", () => {
     expect((await listarDemandas({ kpi: "noprazo" }, agora)).linhas.map((l) => l.titulo)).toEqual(["Outro pedido"]);
   });
 });
+
+describe("Reunião e Toda a carteira (pedidos do usuário de 2026-11-04)", () => {
+  it("convite de reunião nasce com a situação Reunião, conta como aberta e vem no GET; não muda demanda existente", async () => {
+    const r = await integrarMensagens({
+      mensagens: [
+        msg({ conversationId: "conv-r", internetMessageId: "<r1@x>", assunto: "Convite: alinhamento mensal", reuniao: true, prazo: null }),
+        msg(),
+        msg({ internetMessageId: "<m2@x>", enviadoEm: "2026-10-31T10:00:00-03:00", reuniao: true, demanda: false }),
+      ],
+    });
+    expect(r).toMatchObject({ criadas: 2, atualizadas: 1 });
+    expect((await prisma.demanda.findFirstOrThrow({ where: { conversas: { has: "conv-r" } } })).situacao).toBe("REUNIAO");
+    expect((await prisma.demanda.findFirstOrThrow({ where: { conversas: { has: "conv-1" } } })).situacao).toBe("ABERTA");
+
+    const agora = new Date("2026-11-03T12:00:00Z");
+    const lista = await listarDemandas({}, agora);
+    expect(lista.indicadores.abertas).toBe(2);
+    expect(lista.linhas).toHaveLength(2);
+    expect((await listarDemandas({ vis: "reuniao" }, agora)).linhas.map((l) => l.titulo)).toEqual(["Convite: alinhamento mensal"]);
+
+    process.env.DEMANDAS_TOKEN = "token-de-teste-1234567890";
+    const get = await GET(new Request("http://localhost/api/integracao/demandas?abertas=1", { headers: { authorization: "Bearer token-de-teste-1234567890" } }));
+    const { demandas } = await get.json();
+    expect(demandas.map((d: { situacao: string }) => d.situacao).sort()).toEqual(["ABERTA", "REUNIAO"]);
+    delete process.env.DEMANDAS_TOKEN;
+
+    const id = (await prisma.demanda.findFirstOrThrow({ where: { conversas: { has: "conv-1" } } })).id;
+    expect(await atualizarDemanda(EMAIL, id, "situacao", "REUNIAO")).toEqual({ ok: true });
+    expect((await carregarDemanda(id))!.eventos.some((e) => e.texto === "Situação: Aberta → Reunião.")).toBe(true);
+  });
+
+  it("Toda a carteira: pela integração, no detalhe (com log), no registro à mão e no filtro", async () => {
+    await integrarMensagens({
+      mensagens: [
+        msg({ conversationId: "conv-t", internetMessageId: "<t@x>", assunto: "Pedido para todos os prédios", condominio: "Portfólio" }),
+        msg({ conversationId: "conv-s", internetMessageId: "<s@x>", assunto: "Sem prédio", condominio: null }),
+        msg(),
+      ],
+    });
+    const toda = await prisma.demanda.findFirstOrThrow({ where: { conversas: { has: "conv-t" } } });
+    expect(toda).toMatchObject({ todaCarteira: true, condominioId: null });
+
+    const agora = new Date("2026-11-03T12:00:00Z");
+    expect((await listarDemandas({ cond: "toda-carteira" }, agora)).linhas.map((l) => l.titulo)).toEqual(["Pedido para todos os prédios"]);
+    expect((await listarDemandas({ cond: "sem" }, agora)).linhas.map((l) => l.titulo)).toEqual(["Sem prédio"]);
+
+    // Escolher um condomínio zera "Toda a carteira"; voltar a "Toda a carteira" zera o condomínio.
+    expect(await atualizarDemanda(EMAIL, toda.id, "condominioId", condominioId)).toEqual({ ok: true });
+    expect(await prisma.demanda.findUniqueOrThrow({ where: { id: toda.id } })).toMatchObject({ todaCarteira: false, condominioId });
+    expect(await atualizarDemanda(EMAIL, toda.id, "condominioId", "toda-carteira")).toEqual({ ok: true });
+    expect(await prisma.demanda.findUniqueOrThrow({ where: { id: toda.id } })).toMatchObject({ todaCarteira: true, condominioId: null });
+    expect(await atualizarDemanda(EMAIL, toda.id, "condominioId", "toda-carteira")).toEqual({ ok: true }); // sem mudança, sem log
+    const logs = await prisma.logAlteracao.findMany({ where: { entidadeId: toda.id, campo: "condomínio" }, orderBy: { em: "asc" } });
+    expect(logs.map((l) => [l.antes, l.depois])).toEqual([
+      ["Toda a carteira", "Torre Teste"],
+      ["Torre Teste", "Toda a carteira"],
+    ]);
+
+    const r = await registrarDemanda(
+      EMAIL,
+      { titulo: "Pedido em reunião", remetenteNome: "BGRE", canal: "Reunião", chegadaEm: "2026-11-03T09:00", criticidade: "ORDINARIA", condominioId: "toda-carteira" },
+      agora,
+    );
+    expect(await prisma.demanda.findUniqueOrThrow({ where: { id: r.id! } })).toMatchObject({ todaCarteira: true, condominioId: null });
+
+    process.env.DEMANDAS_TOKEN = "token-de-teste-1234567890";
+    const { demandas } = await (await GET(new Request("http://localhost/api/integracao/demandas?abertas=1", { headers: { authorization: "Bearer token-de-teste-1234567890" } }))).json();
+    expect(demandas.filter((d: { condominio: string | null }) => d.condominio === "Toda a carteira")).toHaveLength(2);
+    delete process.env.DEMANDAS_TOKEN;
+  });
+});

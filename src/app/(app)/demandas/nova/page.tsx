@@ -3,6 +3,7 @@ import { BotaoVoltar } from "@/components/botao-voltar";
 import { campo, eyebrow, rotulo } from "@/components/demandas";
 import { FormularioLinha } from "@/components/formulario-linha";
 import { prisma } from "@/lib/db";
+import { ROTULO_TODA_CARTEIRA, TODA_CARTEIRA } from "@/lib/demandas";
 import { CRITICIDADES, ROTULO_CRITICIDADE, paraDataHoraSP } from "@/lib/prazos-demandas";
 
 /** "Registrar demanda" à mão: pedido por telefone, em reunião ou por WhatsApp. O horário de chegada é informado no ato. */
@@ -62,6 +63,7 @@ export default async function NovaDemanda() {
             Condomínio (opcional)
             <select name="condominioId" defaultValue="" className={campo}>
               <option value="">— sem condomínio —</option>
+              <option value={TODA_CARTEIRA}>{ROTULO_TODA_CARTEIRA}</option>
               {condominios.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.nome}

@@ -154,6 +154,8 @@ enum SituacaoDemanda {
   ABERTA
   EM_ANDAMENTO
   AGUARDANDO
+  // Agendamento de reunião (pedido do usuário de 2026-11-04); conta como aberta.
+  REUNIAO
   CONCLUIDA
   ARQUIVADA
 }
@@ -191,6 +193,8 @@ model Demanda {
   remetenteEmail      String             @default("")
   condominioId        String?
   condominio          Condominio?        @relation(fields: [condominioId], references: [id])
+  // Demanda que envolve todos os condomínios BGRE (pedido do usuário de 2026-11-04); com ela, condominioId fica nulo.
+  todaCarteira        Boolean            @default(false)
   criticidade         Criticidade        @default(ORDINARIA)
   // Envio do e-mail da BGRE (ou o horário informado no registro à mão): o relógio do SLA começa aqui.
   chegadaEm           DateTime

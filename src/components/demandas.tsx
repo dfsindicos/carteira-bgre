@@ -26,6 +26,7 @@ export const COR_SITUACAO: Record<string, string> = {
   ABERTA: "bg-erro",
   EM_ANDAMENTO: "bg-atencao",
   AGUARDANDO: "bg-info",
+  REUNIAO: "bg-ouro",
   CONCLUIDA: "bg-ok",
   ARQUIVADA: "bg-suave",
 };
