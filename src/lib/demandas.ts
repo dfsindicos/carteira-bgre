@@ -33,9 +33,9 @@ export const ROTULO_SITUACAO: Record<Situacao, string> = {
   CONCLUIDA: "Concluída",
   ARQUIVADA: "Arquivada",
 };
-export const AGUARDANDO = ["DF", "BGRE", "ADMINISTRADORA", "CORRETORA", "FORNECEDOR"] as const;
+export const AGUARDANDO = ["DF", "BGRE", "ADMINISTRADORA", "LOCATARIO", "CORRETORA", "FORNECEDOR"] as const;
 export type Aguardando = (typeof AGUARDANDO)[number];
-export const ROTULO_AGUARDANDO: Record<Aguardando, string> = { DF: "DF", BGRE: "BGRE", ADMINISTRADORA: "Administradora", CORRETORA: "Corretora", FORNECEDOR: "Fornecedor" };
+export const ROTULO_AGUARDANDO: Record<Aguardando, string> = { DF: "DF", BGRE: "BGRE", ADMINISTRADORA: "Administradora", LOCATARIO: "Locatário", CORRETORA: "Corretora", FORNECEDOR: "Fornecedor" };
 
 /** Quem grava pela integração, no LogAlteracao. */
 export const ROTINA = "rotina Triagem Contratante";

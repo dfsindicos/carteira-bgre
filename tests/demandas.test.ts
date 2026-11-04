@@ -200,7 +200,7 @@ describe("demandas pela tela", () => {
     expect(await prisma.demanda.findUniqueOrThrow({ where: { id } })).toMatchObject({ origem: "MANUAL", canal: "Telefone", chegadaEm: new Date("2026-11-03T12:00:00Z") });
 
     expect(await atualizarDemanda(EMAIL, id, "responsavel", "analista@dfsindicos.com.br")).toEqual({ ok: true });
-    expect(await atualizarDemanda(EMAIL, id, "aguardando", "CORRETORA")).toEqual({ ok: true });
+    expect(await atualizarDemanda(EMAIL, id, "aguardando", "LOCATARIO")).toEqual({ ok: true });
     expect(await atualizarDemanda(EMAIL, id, "condominioId", "")).toEqual({ ok: true });
     expect(await atualizarDemanda(EMAIL, id, "situacao", "ARQUIVADA")).toMatchObject({ ok: false });
     expect(await atualizarDemanda(EMAIL, id, "numero", "9")).toMatchObject({ ok: false });
@@ -225,7 +225,7 @@ describe("demandas pela tela", () => {
 
     const tela = (await carregarDemanda(id))!;
     expect(tela.eventos.map((e) => e.tipo)).toContain("NOTA");
-    expect(tela.eventos.some((e) => e.texto.startsWith("Aguardando: — → Corretora"))).toBe(true);
+    expect(tela.eventos.some((e) => e.texto.startsWith("Aguardando: — → Locatário"))).toBe(true);
   });
 
   it("lista com indicadores e filtros", async () => {

@@ -162,6 +162,7 @@ enum AguardandoDemanda {
   DF
   BGRE
   ADMINISTRADORA
+  LOCATARIO
   CORRETORA
   FORNECEDOR
 }
