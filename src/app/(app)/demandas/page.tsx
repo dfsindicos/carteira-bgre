@@ -68,8 +68,8 @@ export default async function Demandas({ searchParams }: { searchParams: Promise
       <th className={`px-2.5 py-2 ${className}`} aria-sort={ativo ? (fl.dir === "asc" ? "ascending" : "descending") : undefined}>
         <Link href={url({ ord: ord === "numero" ? undefined : ord, dir: dir === SENTIDO_PADRAO[ord] ? undefined : dir })} className="inline-flex items-center gap-1 hover:underline">
           {children}
-          <span aria-hidden="true" className={ativo ? "" : "opacity-40"}>
-            {ativo ? (fl.dir === "asc" ? "▲" : "▼") : "↕"}
+          <span aria-hidden="true" className={ativo ? "text-ouro" : "opacity-60"}>
+            {ativo ? (fl.dir === "asc" ? "▲" : "▼") : "⇅"}
           </span>
         </Link>
       </th>
@@ -279,16 +279,22 @@ export default async function Demandas({ searchParams }: { searchParams: Promise
           <thead>
             <tr className="bg-marca text-left text-[12.5px] text-marca-texto">
               <Ordena ord="numero">Nº</Ordena>
-              <th className="px-2.5 py-2">Demanda</th>
-              <th className="px-2.5 py-2 max-md:hidden">Condomínio</th>
+              <Ordena ord="titulo">Demanda</Ordena>
+              <Ordena ord="condominio" className="max-md:hidden">
+                Condomínio
+              </Ordena>
               <Ordena ord="chegada" className="max-md:hidden">
                 Chegou
               </Ordena>
-              <th className="px-2.5 py-2 max-sm:hidden">1ª resposta</th>
+              <Ordena ord="resposta" className="max-sm:hidden">
+                1ª resposta
+              </Ordena>
               <Ordena ord="prazo" className="max-sm:hidden">
                 Prazo
               </Ordena>
-              <th className="px-2.5 py-2 max-sm:hidden">Situação</th>
+              <Ordena ord="situacao" className="max-sm:hidden">
+                Situação
+              </Ordena>
             </tr>
           </thead>
           <tbody>

@@ -549,6 +549,7 @@ export async function listarDemandas(f: Filtros, agora = new Date()) {
         prazo: situacaoPrazo(d, cfg, agora),
         prazoEm,
         prazoLimite: prazoEm.em,
+        respostaLimite: prazoResposta(d, cfg),
         condominioNome: nomeCondominio(d),
         assuntos: [...new Set(d.mensagens.map((m) => m.assunto).filter(Boolean))],
         ultimaMovimentacao: new Date(Math.max(...movimentos.map((x) => x.getTime()))),

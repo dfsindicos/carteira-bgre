@@ -96,3 +96,20 @@ describe("filtros e ordem da lista de demandas", () => {
     expect(busca("nada disso")).toEqual([]);
   });
 });
+
+describe("ordem pelas demais colunas", () => {
+  const ls = [
+    linha({ numero: 1, titulo: "Cobrar laudo", situacao: "AGUARDANDO", respostaLimite: new Date("2026-11-05T12:00:00Z") }),
+    linha({ numero: 2, titulo: "Agendar reunião", situacao: "ABERTA", primeiraRespostaEm: new Date("2026-11-01T12:00:00Z") }),
+    linha({ numero: 3, titulo: "Bater o orçamento", situacao: "REUNIAO", respostaLimite: new Date("2026-11-04T12:00:00Z") }),
+    linha({ numero: 4, titulo: "Último sem limite", situacao: "EM_ANDAMENTO", respostaLimite: null }),
+  ];
+  it("ordena por título, 1ª resposta e situação, nos dois sentidos", () => {
+    expect(ordenar(ls, "titulo", "asc").map((l) => l.numero)).toEqual([2, 3, 1, 4]);
+    expect(ordenar(ls, "titulo", "desc").map((l) => l.numero)).toEqual([4, 1, 3, 2]);
+    // Pendentes pelo limite (mais urgente primeiro), depois as respondidas; sem limite no fim.
+    expect(ordenar(ls, "resposta", "asc").map((l) => l.numero)).toEqual([3, 1, 2, 4]);
+    expect(ordenar(ls, "situacao", "asc").map((l) => l.numero)).toEqual([2, 4, 1, 3]);
+    expect(lerFiltros({ ord: "situacao" })).toMatchObject({ ord: "situacao", dir: "asc" });
+  });
+});

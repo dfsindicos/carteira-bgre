@@ -14,11 +14,14 @@ export const ORDENS = {
   movimento: "Última movimentação",
   criticidade: "Criticidade",
   condominio: "Condomínio",
+  titulo: "Demanda (A→Z)",
+  resposta: "1ª resposta",
+  situacao: "Situação",
 } as const;
 export type Ordem = keyof typeof ORDENS;
 export type Sentido = "asc" | "desc";
 /** Sentido padrão de cada ordem: Nº, chegada e movimentação mais novos primeiro; prazo mais urgente primeiro; criticidade da Crítica para baixo; condomínio A→Z. */
-export const SENTIDO_PADRAO: Record<Ordem, Sentido> = { numero: "desc", chegada: "desc", prazo: "asc", movimento: "desc", criticidade: "asc", condominio: "asc" };
+export const SENTIDO_PADRAO: Record<Ordem, Sentido> = { numero: "desc", chegada: "desc", prazo: "asc", movimento: "desc", criticidade: "asc", condominio: "asc", titulo: "asc", resposta: "asc", situacao: "asc" };
 
 export const FILTROS_PRAZO = { vencidas: "Vencidas", hoje: "Vence hoje", "7dias": "Próximos 7 dias", sem: "Sem prazo" } as const;
 export const FILTROS_RESPOSTA = { feita: "Feita", pendente: "Pendente" } as const;
@@ -80,6 +83,8 @@ export type LinhaFiltro = {
   prazoLimite: Date | null;
   condominioNome: string | null;
   ultimaMovimentacao: Date;
+  /** Limite da 1ª resposta pelo SLA (para ordenar a coluna "1ª resposta"). */
+  respostaLimite?: Date | null;
 };
 
 const DIA = 86_400_000;
@@ -127,6 +132,9 @@ export function filtrar<T extends LinhaFiltro>(linhas: T[], f: FiltrosLista, ago
 }
 
 const PESO_CRITICIDADE: Record<string, number> = { CRITICA: 0, URGENTE: 1, ORDINARIA: 2, COMPLEXA: 3 };
+const PESO_SITUACAO: Record<string, number> = { ABERTA: 0, EM_ANDAMENTO: 1, AGUARDANDO: 2, REUNIAO: 3, CONCLUIDA: 4, ARQUIVADA: 5 };
+/** Depois de todas as pendentes vêm as já respondidas (pela hora da resposta). */
+const RESPONDIDA = 1e15;
 
 /** Ordena (cópia). Sem prazo ou sem condomínio ficam sempre no fim; empate = número mais novo primeiro. */
 export function ordenar<T extends LinhaFiltro>(linhas: T[], ord: Ordem, dir: Sentido): T[] {
@@ -144,6 +152,12 @@ export function ordenar<T extends LinhaFiltro>(linhas: T[], ord: Ordem, dir: Sen
         return PESO_CRITICIDADE[l.criticidade] ?? 9;
       case "condominio":
         return l.condominioNome ? normalizarBusca(l.condominioNome) : null;
+      case "titulo":
+        return normalizarBusca(l.titulo);
+      case "resposta":
+        return l.primeiraRespostaEm ? RESPONDIDA + l.primeiraRespostaEm.getTime() : (l.respostaLimite?.getTime() ?? null);
+      case "situacao":
+        return PESO_SITUACAO[l.situacao] ?? 9;
     }
   };
   const s = dir === "asc" ? 1 : -1;
