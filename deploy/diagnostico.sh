@@ -24,8 +24,17 @@ secao "Conexões do banco agora (estado e tempo, sem consultas)"
 docker exec bgre-db-1 psql -U app -d bgre -At -F ' · ' -c \
   "SELECT coalesce(state,'-'), coalesce(wait_event_type||'/'||wait_event,'-'), coalesce(to_char(now()-xact_start,'HH24:MI:SS'),'-') FROM pg_stat_activity WHERE datname='bgre' ORDER BY xact_start NULLS LAST" 2>&1 | head -n 20
 
-secao "App: erros e reinício nas últimas $HORAS h"
-docker logs --since "${HORAS}h" bgre-app-1 2>&1 | grep -E 'heap|out of memory|Killed|ERRO|Error|ready|Starting|Ready|\[login microsoft\]' | tail -n 120
+# Só contagens: o texto das linhas do app pode trazer nome de condomínio, e-mail mascarado e mensagem de erro, e o log do
+# Actions não é lugar para isso (revisão de segurança de 2026-11-12). Para ler o texto, use o terminal da VPS.
+secao "App: erros e reinício nas últimas $HORAS h (só contagens, sem o texto)"
+LOG_APP="$(docker logs --since "${HORAS}h" bgre-app-1 2>&1)"
+conta() { printf '%s: %s\n' "$1" "$(printf '%s\n' "$LOG_APP" | grep -cE "$2")"; }
+conta "linhas no período" '.'
+conta "início do app (Starting/Ready)" 'ready|Starting|Ready'
+conta "memória (heap, out of memory, Killed)" 'heap|out of memory|Killed'
+conta "erros (ERRO, Error)" 'ERRO|Error'
+conta "login Microsoft recusado ([login microsoft])" '\[login microsoft\]'
+conta "importação com falha ([importar], [importar-json])" '\[importar(-json)?\]'
 
 secao "Dados (só contagens, sem conteúdo)"
 docker exec bgre-db-1 psql -U app -d bgre -At -F ' · ' -c "
