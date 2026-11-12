@@ -18,5 +18,10 @@ export function acharCondominioPorNome<T extends { nome: string }>(lista: T[], n
   const exato = lista.find((c) => chaveCondominio(c.nome) === chaveCondominio(nome));
   if (exato) return exato;
   const parecidos = lista.filter((c) => normalizarNome(c.nome) === normalizarNome(nome));
-  return parecidos.length === 1 ? parecidos[0] : undefined;
+  if (parecidos.length === 1) return parecidos[0];
+  // Pontuação entre números e espaços não contam ("17007 Nações" = "17.007 Nações"; visto pelo usuário em 2026-11-12),
+  // só com candidato único.
+  const junto = (s: string) => chaveCondominio(s).replace(/ /g, "");
+  const colados = lista.filter((c) => junto(c.nome) === junto(nome));
+  return colados.length === 1 ? colados[0] : undefined;
 }

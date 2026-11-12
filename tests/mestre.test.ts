@@ -61,7 +61,7 @@ describe("cadastro mestre", () => {
     const logs = await prisma.logAlteracao.count();
     const r = await sincronizarComMestre(mestre());
     expect(r.administradoras).toEqual({ ligadas: 0, criadas: 0, renomeadas: 0 });
-    expect(r.condominios).toEqual({ criados: 0, atualizados: 0, inativados: 0 });
+    expect(r.condominios).toEqual({ criados: 0, atualizados: 0, inativados: 0, juntados: 0 });
     expect(await prisma.logAlteracao.count()).toBe(logs);
   });
 
@@ -76,7 +76,7 @@ describe("cadastro mestre", () => {
       { codigo: "c-2", nome: "Edifício Beta Novo", outrosNomes: [], administradora: "adm-1", ativo: true },
     ];
     const r = await sincronizarComMestre(m);
-    expect(r.condominios).toEqual({ criados: 0, atualizados: 1, inativados: 1 });
+    expect(r.condominios).toEqual({ criados: 0, atualizados: 1, inativados: 1, juntados: 0 });
     const c1 = await prisma.condominio.findUniqueOrThrow({ where: { id: condId }, include: { avaliacoes: true } });
     expect([c1.ativo, c1.flashSlug, c1.avaliadoDesdeAno, c1.avaliacoes.length]).toEqual([false, "torre-teste", 2025, 1]);
     const c2 = await prisma.condominio.findUniqueOrThrow({ where: { codigoMestre: "c-2" }, include: { administradora: true } });
@@ -145,5 +145,26 @@ describe("cadastro mestre", () => {
     const antes = await prisma.condominio.count({ where: { ativo: true } });
     await expect(sincronizarComMestre({ condominios: [], administradoras: [], proprietarios: [] })).rejects.toThrow("nada foi feito");
     expect(await prisma.condominio.count({ where: { ativo: true } })).toBe(antes);
+  });
+  it("junta o duplicado: com o outro nome no Action Log, o antigo fica com o código e o novo vazio sai (2026-11-12)", async () => {
+    await prisma.condominio.create({ data: { nome: "Panamerica Park", administradoraId: admId } });
+    const um = (outrosNomes: string[]) =>
+      mestre({ condominios: [{ codigo: "c-1", nome: "Torre Teste", outrosNomes: [], administradora: "adm-1", ativo: true }, { codigo: "pa", nome: "Panamérica", outrosNomes, administradora: "adm-1", ativo: true }] });
+    await sincronizarComMestre(um([]));
+    expect((await prisma.condominio.findMany({ where: { nome: { startsWith: "Panam" } }, orderBy: { nome: "asc" } })).map((c) => [c.nome, c.codigoMestre])).toEqual([
+      ["Panamerica Park", null],
+      ["Panamérica", "pa"],
+    ]);
+    const antigo = await prisma.condominio.findFirstOrThrow({ where: { nome: "Panamerica Park" } });
+    const r = await sincronizarComMestre(um(["Panamerica Park"]));
+    expect(r.condominios.juntados).toBe(1);
+    expect((await prisma.condominio.findMany({ where: { nome: { startsWith: "Panam" } } })).map((c) => [c.id, c.nome, c.codigoMestre])).toEqual([[antigo.id, "Panamérica", "pa"]]);
+    expect(r.soAqui).toEqual([]);
+  });
+
+  it("pontuação entre números não conta: 17007 casa com 17.007", async () => {
+    const velho = await prisma.condominio.create({ data: { nome: "17007 Nações", administradoraId: admId } });
+    await sincronizarComMestre(mestre({ condominios: [{ codigo: "c-1", nome: "Torre Teste", outrosNomes: [], administradora: "adm-1", ativo: true }, { codigo: "n", nome: "17.007 Nações", outrosNomes: [], administradora: "adm-1", ativo: true }] }));
+    expect(await prisma.condominio.findUniqueOrThrow({ where: { id: velho.id } })).toMatchObject({ nome: "17.007 Nações", codigoMestre: "n" });
   });
 });

@@ -32,7 +32,7 @@ export type DadosMestre = z.input<typeof esquema>;
 
 export type ResumoSincronizacao = {
   administradoras: { ligadas: number; criadas: number; renomeadas: number };
-  condominios: { criados: number; atualizados: number; inativados: number };
+  condominios: { criados: number; atualizados: number; inativados: number; juntados: number };
   soAqui: string[];
   conflitos: string[];
 };
@@ -43,6 +43,10 @@ type ComNome = { id: string; nome: string; codigoMestre: string | null };
 function acharLocal<T extends ComNome>(linhas: T[], m: { codigo: string; nome: string; outrosNomes: string[] }): T | undefined {
   const porCodigo = linhas.find((l) => l.codigoMestre === m.codigo);
   if (porCodigo) return porCodigo;
+  return acharSemCodigo(linhas, m);
+}
+
+function acharSemCodigo<T extends ComNome>(linhas: T[], m: { nome: string; outrosNomes: string[] }): T | undefined {
   const livres = linhas.filter((l) => !l.codigoMestre);
   for (const n of [m.nome, ...m.outrosNomes]) {
     const achado = acharCondominioPorNome(livres, n);
@@ -58,7 +62,7 @@ export async function sincronizarComMestre(entrada: unknown, agora = new Date())
   if (!d.condominios.some((c) => c.ativo)) throw new Error("nenhum condomínio ligado à Carteira BGRE no Action Log (Configurações → Sistemas): nada foi feito");
   const r: ResumoSincronizacao = {
     administradoras: { ligadas: 0, criadas: 0, renomeadas: 0 },
-    condominios: { criados: 0, atualizados: 0, inativados: 0 },
+    condominios: { criados: 0, atualizados: 0, inativados: 0, juntados: 0 },
     soAqui: [],
     conflitos: [],
   };
@@ -117,7 +121,25 @@ export async function sincronizarComMestre(entrada: unknown, agora = new Date())
       // 2. Condomínios.
       const conds = await tx.condominio.findMany({ select: { id: true, nome: true, codigoMestre: true, ativo: true, administradoraId: true } });
       for (const m of d.condominios) {
-        const c = acharLocal(conds, m);
+        let c = acharLocal(conds, m);
+        // Juntar duplicado (problema visto pelo usuário em 2026-11-12): a 1ª leitura criou um condomínio novo porque o nome
+        // antigo não casava; depois que o nome casa (outros nomes no Action Log ou pontuação), o antigo, com as avaliações,
+        // fica com o código e o novo, se ainda estiver vazio, é retirado.
+        if (c?.codigoMestre === m.codigo) {
+          const antigo = acharSemCodigo(conds.filter((x) => x.ativo), m);
+          const vazio = async (id: string) =>
+            (await tx.avaliacao.count({ where: { condominioId: id } })) === 0 &&
+            (await tx.flashSemana.count({ where: { condominioId: id } })) === 0 &&
+            (await tx.demanda.count({ where: { condominioId: id } })) === 0 &&
+            !(await tx.condominio.findUniqueOrThrow({ where: { id }, select: { flashSlug: true } })).flashSlug;
+          if (antigo && antigo.id !== c.id && (await vazio(c.id))) {
+            await tx.condominio.delete({ where: { id: c.id } });
+            await registrar(tx, QUEM, "Condominio", c.id, "retirado: duplicado vazio, juntado a " + antigo.nome, c.nome, null);
+            conds.splice(conds.indexOf(c), 1);
+            c = antigo;
+            r.condominios.juntados++;
+          }
+        }
         if (!m.ativo) {
           // Desligado ou arquivado no Action Log: inativo aqui, sem apagar nada. Não entra se ainda não existe.
           if (!c || (!c.ativo && c.codigoMestre === m.codigo)) continue;
