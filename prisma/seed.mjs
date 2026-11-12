@@ -1,7 +1,7 @@
 // Dados de demonstração, todos inventados (regra do repositório: nada de dado real). Só roda com SEED_DEMO=true.
 // Idempotente: pode rodar de novo sem duplicar (upsert pelo nome e por condomínio+trimestre+tipo). Cria as duas
 // avaliações (Administradora e Sindicância) de 1T25 ao 3T26 em vários estados: concluída, em andamento, estimativa,
-// sem planilha e a fazer, e condomínios com "avaliado desde". Também cria algumas demandas da BGRE (exemplo).
+// sem planilha e a fazer, e condomínios com "avaliado desde".
 //   SEED_DEMO=true npm run db:seed
 import { PrismaClient } from "@prisma/client";
 
@@ -117,52 +117,6 @@ await prisma.condominio.upsert({
   update: {},
   create: { nome: "Residencial Antigo (demo, inativo)", administradoraId: adms[2].id, ativo: false },
 });
-
-// Demandas da BGRE (exemplo): idempotente pela conversa (conversas[0] = "demo-conv-N"). Pessoas e textos inventados.
-const agora = Date.now();
-const h = (horas) => new Date(agora - horas * 3_600_000);
-const dia = (dias) => new Date(Date.UTC(new Date(agora).getUTCFullYear(), new Date(agora).getUTCMonth(), new Date(agora).getUTCDate() + dias));
-const condPorNome = Object.fromEntries((await prisma.condominio.findMany({ select: { id: true, nome: true } })).map((c) => [c.nome, c.id]));
-// [título, condomínio, criticidade, chegou há (horas), prazo do e-mail (dias a partir de hoje), 1ª resposta depois de (horas), situação, aguardando, responsável]
-const demandas = [
-  ["Pagamento da taxa do certificado de segurança (exemplo)", "Torre Aurora (demo)", "URGENTE", 70, 2, null, "ABERTA", "DF", "analista.demo@exemplo.test"],
-  ["Envio do certificado de inspeção da unidade (exemplo)", "Centro Empresarial Sul (demo)", "ORDINARIA", 120, 7, 20, "AGUARDANDO", "ADMINISTRADORA", "analista.demo@exemplo.test"],
-  ["Ata da assembleia para venda de equipamento (exemplo)", "Edifício Horizonte (demo)", "COMPLEXA", 150, null, 17, "EM_ANDAMENTO", "BGRE", "gestora.demo@exemplo.test"],
-  ["Mapa de cotação da renovação do seguro (exemplo)", "Corporate Norte (demo)", "ORDINARIA", 300, -3, 6, "EM_ANDAMENTO", "CORRETORA", "gestora.demo@exemplo.test"],
-  ["Fotos das pendências da obra (exemplo)", null, "ORDINARIA", 100, null, null, "ABERTA", null, ""],
-  ["Relatório de consumo de energia (exemplo)", "Parque Empresarial Leste (demo)", "ORDINARIA", 340, -7, 19, "CONCLUIDA", null, "analista.demo@exemplo.test"],
-];
-for (const [i, [titulo, cond, criticidade, chegou, prazo, resposta, situacao, aguardando, responsavel]] of demandas.entries()) {
-  const conv = `demo-conv-${i + 1}`;
-  if (await prisma.demanda.findFirst({ where: { conversas: { has: conv } } })) continue;
-  const chegadaEm = h(chegou);
-  await prisma.demanda.create({
-    data: {
-      titulo,
-      remetenteNome: "Gestão de ativos (demo)",
-      remetenteEmail: "ativos@bgre.example",
-      condominioId: cond ? condPorNome[cond] : null,
-      criticidade,
-      chegadaEm,
-      prazoEmail: prazo === null ? null : dia(prazo),
-      primeiraRespostaEm: resposta === null ? null : new Date(chegadaEm.getTime() + resposta * 3_600_000),
-      primeiraRespostaPor: resposta === null ? null : "analista.demo@exemplo.test",
-      situacao,
-      aguardando,
-      responsavel,
-      concluidaEm: situacao === "CONCLUIDA" ? h(chegou - 72) : null,
-      conversas: [conv],
-      mensagens: {
-        create: [
-          { internetMessageId: `<${conv}@exemplo.test>`, conversationId: conv, tipo: "RECEBIDA", em: chegadaEm, autorNome: "Gestão de ativos (demo)", autorEmail: "ativos@bgre.example", assunto: titulo, texto: `Pede: ${titulo.toLowerCase()}.` },
-          ...(resposta === null
-            ? []
-            : [{ internetMessageId: `<${conv}-r@exemplo.test>`, conversationId: conv, tipo: "ENVIADA_DF", em: new Date(chegadaEm.getTime() + resposta * 3_600_000), autorNome: "Analista (demo)", autorEmail: "analista.demo@exemplo.test", texto: "Recebido; já pedimos à administradora (exemplo)." }]),
-        ],
-      },
-    },
-  });
-}
 
 console.log("Seed de demonstração aplicado.");
 await prisma.$disconnect();

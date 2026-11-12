@@ -53,8 +53,6 @@ services:
       CRON_SECRET: ${CRON_SECRET:-}
       # Senha da rotina que grava o Flash Report (/api/integracao/flash).
       FLASH_TOKEN: ${FLASH_TOKEN:-}
-      # Senha da Triagem Contratante que grava e lê as demandas da BGRE (/api/integracao/demandas).
-      DEMANDAS_TOKEN: ${DEMANDAS_TOKEN:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/saude').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s

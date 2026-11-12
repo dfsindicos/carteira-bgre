@@ -25,6 +25,13 @@ const config: NextConfig = {
   async rewrites() {
     return [{ source: "/flash", destination: "/flash.html" }];
   },
+  // As demandas da BGRE foram para o Demandas Proprietários (2026-11-11): endereços antigos levam para lá.
+  async redirects() {
+    return [
+      { source: "/demandas", destination: "https://demandas.gestaodfsindicos.tech", permanent: false },
+      { source: "/demandas/:caminho*", destination: "https://demandas.gestaodfsindicos.tech", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

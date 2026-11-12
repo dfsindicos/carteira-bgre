@@ -5,17 +5,6 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { criarAvaliacao, marcarPassos, mudarPrazo, salvarAcompanhamento, salvarCampo, type NumeroPasso, type Resposta } from "@/lib/avaliacoes";
 import { salvarAdministradora, salvarCondominio } from "@/lib/cadastro";
-import {
-  arquivarDemanda,
-  atualizarDemanda,
-  marcarPrimeiraResposta,
-  reabrirDemanda,
-  registrarAndamento,
-  registrarDemanda,
-  salvarSla,
-  voltarSlaPadrao,
-} from "@/lib/demandas";
-import { CRITICIDADES } from "@/lib/prazos-demandas";
 import { formatarPeriodo, lerPeriodo, lerTipo } from "@/lib/scorecard";
 import { sessaoAtual } from "@/lib/sessao";
 
@@ -79,83 +68,5 @@ export async function acaoSalvarCondominio(form: FormData): Promise<Resposta> {
     avaliadoDesde: texto(form, "avaliadoDesde"),
   });
   revalidatePath("/", "layout");
-  return r;
-}
-
-// ── Demandas da BGRE ─────────────────────────────────────────────────────────────────────────────────────────────────
-
-export async function acaoRegistrarDemanda(form: FormData): Promise<Resposta> {
-  const { email } = await sessaoAtual();
-  const r = await registrarDemanda(email, {
-    titulo: texto(form, "titulo"),
-    remetenteNome: texto(form, "remetenteNome"),
-    remetenteEmail: texto(form, "remetenteEmail"),
-    canal: texto(form, "canal"),
-    chegadaEm: texto(form, "chegadaEm"),
-    criticidade: texto(form, "criticidade"),
-    condominioId: texto(form, "condominioId"),
-    prazoEmail: texto(form, "prazoEmail"),
-    responsavel: texto(form, "responsavel"),
-    descricao: texto(form, "descricao"),
-    webLink: texto(form, "webLink"),
-  });
-  if (!r.ok) return r;
-  revalidatePath("/demandas", "layout");
-  redirect(`/demandas/${r.id}`);
-}
-
-/** Troca de responsável, situação, aguardando, criticidade, condomínio ou prazos (atualizarDemanda valida com Zod). */
-export async function acaoCampoDemanda(id: string, campo: string, valor: string): Promise<Resposta> {
-  const { email } = await sessaoAtual();
-  const r = await atualizarDemanda(email, z.string().parse(id), z.string().parse(campo), z.string().parse(valor));
-  revalidatePath("/demandas", "layout");
-  return r;
-}
-
-export async function acaoAndamentoDemanda(form: FormData): Promise<Resposta> {
-  const { email, nome } = await sessaoAtual();
-  const r = await registrarAndamento(email, nome, texto(form, "id"), texto(form, "texto"));
-  revalidatePath("/demandas", "layout");
-  return r;
-}
-
-export async function acaoPrimeiraResposta(form: FormData): Promise<Resposta> {
-  const { email } = await sessaoAtual();
-  const r = await marcarPrimeiraResposta(email, texto(form, "id"), texto(form, "quando"));
-  revalidatePath("/demandas", "layout");
-  return r;
-}
-
-export async function acaoArquivarDemanda(form: FormData): Promise<Resposta> {
-  const { email } = await sessaoAtual();
-  const r = await arquivarDemanda(email, texto(form, "id"), texto(form, "motivo"));
-  revalidatePath("/demandas", "layout");
-  return r;
-}
-
-export async function acaoReabrirDemanda(id: string): Promise<Resposta> {
-  const { email } = await sessaoAtual();
-  const r = await reabrirDemanda(email, z.string().parse(id));
-  revalidatePath("/demandas", "layout");
-  return r;
-}
-
-/** Configuração do SLA: campos "<CRITICIDADE>-rv", "-ru", "-cv", "-cu" e as duas caixas de opção. salvarSla valida com Zod. */
-export async function acaoSalvarSla(form: FormData): Promise<Resposta> {
-  const { email } = await sessaoAtual();
-  const regra = (c: string, p: "r" | "c") => ({ valor: texto(form, `${c}-${p}v`), unidade: texto(form, `${c}-${p}u`) });
-  const r = await salvarSla(email, {
-    regras: Object.fromEntries(CRITICIDADES.map((c) => [c, { resposta: regra(c, "r"), conclusao: regra(c, "c") }])),
-    contarFeriados: form.get("contarFeriados") === "on",
-    prazoEmailPrevalece: form.get("prazoEmailPrevalece") === "on",
-  });
-  revalidatePath("/demandas", "layout");
-  return r;
-}
-
-export async function acaoSlaPadrao(): Promise<Resposta> {
-  const { email } = await sessaoAtual();
-  const r = await voltarSlaPadrao(email);
-  revalidatePath("/demandas", "layout");
   return r;
 }
