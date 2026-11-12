@@ -7,7 +7,6 @@ const MENU = [
   { href: "/", rotulo: "Painel" },
   { href: "/avaliacao", rotulo: "Avaliação trimestral" },
   { href: "/flash", rotulo: "Flash Report" },
-  { href: "/demandas", rotulo: "Demandas" },
   { href: "/cadastro", rotulo: "Cadastro" },
   { href: "/importar", rotulo: "Importar" },
 ];

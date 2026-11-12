@@ -31,12 +31,11 @@ Mesmo modelo do Vistorias e do Action Log: tudo na VPS roda pelo GitHub Actions,
 | `DOMINIO` | variável | `bgre.gestaodfsindicos.tech` |
 | `BACKUP_DESTINO` | variável | `onedrive:Backups/bgre` (vazio desliga a cópia externa) |
 | `FLASH_TOKEN` | segredo | senha da rotina do Flash Report (`openssl rand -hex 32`); o mesmo valor vai como variável `FLASH_TOKEN` no ambiente do Claude das rotinas. Vazio desliga `/api/integracao/flash` (503) |
-| `DEMANDAS_TOKEN` | segredo | senha da Triagem Contratante para as demandas da BGRE (`openssl rand -hex 32`); o mesmo valor vai como variável `DEMANDAS_TOKEN` no ambiente do Claude da rotina. Vazio desliga `/api/integracao/demandas` (503) |
 
 Sem `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` no GitHub: nascem no servidor (acima).
 
 ## `.env` do servidor (`/opt/bgre/.env`, escrito pelo deploy; não editar à mão)
-`MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `FLASH_TOKEN`, `DEMANDAS_TOKEN`, `APP_URL` (`https://<DOMINIO>`), `DOMINIO`, `BACKUP_DESTINO`, `RETENCAO_DIAS=14`, mais `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` lidos dos arquivos do servidor. Cada linha vai como `NOME='valor'`.
+`MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `FLASH_TOKEN`, `APP_URL` (`https://<DOMINIO>`), `DOMINIO`, `BACKUP_DESTINO`, `RETENCAO_DIAS=14`, mais `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` lidos dos arquivos do servidor. Cada linha vai como `NOME='valor'`.
 
 ## O que o usuário precisa fazer antes do primeiro deploy
 1. **Repositório no GitHub** `dfsindicos/carteira-bgre` e o ambiente `producao`: https://github.com/dfsindicos/carteira-bgre/settings/environments, com os segredos e variáveis da tabela.
@@ -107,71 +106,5 @@ Segunda parte da tela **Importar**, rota `/api/importar/json` (JSON, sessão, me
 - **"Gerar planilha BGRE"** com modelo: preenche o cabeçalho, a nota (fração, no formato % do modelo) e o comentário de cada item direto no XML da aba do Score Card; refaz as fórmulas das marcas "X" de todos os itens (o modelo pode trazer "X" digitado à mão), tira os resultados guardados das fórmulas e a cadeia de cálculo e liga o recálculo ao abrir. Logo, estilos, fórmulas e as outras abas ficam como vieram. Nome do arquivo: "<prédio> - <3T26> - Planilha de Avaliação Administração/Sindicância.xlsx". Item sem nota fica em branco.
 - Conferência feita em 2026-10-27 com os modelos reais de um prédio da carteira (Administração e Sindicância), abrindo no LibreOffice com recálculo: índices por bloco e avaliação final saem das fórmulas da BGRE.
 
-## Demandas da BGRE
-- **Tela:** `/demandas` (menu "Demandas"): indicadores (em aberto, sem 1ª resposta, prazo vencido, vencem em 7 dias, concluídas no prazo nos últimos 30 dias; clicar filtra), situação (chips), tabela e "Exportar Excel" (`/demandas/exportar`, com os mesmos filtros e a mesma ordem). **Filtros e ordem** (pedido do usuário de 2026-11-04; recolhidos em "Filtros e ordem" no celular, abertos no computador): busca por texto (nº — "41", "#41", "nº 41" —, título, pedido, o que fazer, remetente e assunto dos e-mails, sem acento), condomínio (inclui "Toda a carteira" e "Sem condomínio"), responsável, criticidade, aguardando quem (inclui "Ninguém"), prazo (vencidas, vence hoje, próximos 7 dias, sem prazo), 1ª resposta (feita, pendente), origem (Triagem, Planner/Monday importado, registro à mão) e período de chegada (de/até, dia de São Paulo); "Limpar filtros"; com filtro, a contagem mostra "N de M demandas" (M = total da situação escolhida). Os indicadores do topo continuam clicáveis e combinam com os filtros. **Ordenar por:** Nº (padrão, mais novo primeiro), chegada do e-mail, prazo (mais urgente primeiro; sem prazo ou "a combinar" sempre no fim), última movimentação (última mensagem, nota ou alteração), criticidade (Crítica → Urgente → Ordinária → Complexa) ou condomínio (A→Z), e o sentido; no computador, os cabeçalhos Nº, Chegou e Prazo também ordenam (clicar de novo inverte). Tudo fica na URL (`?q=&cond=&resp=&crit=&ag=&prazo=&resp1=&origem=&de=&ate=&ord=&dir=`), e a demanda aberta da lista volta para ela com os mesmos filtros ("← Voltar à lista"). Cada demanda abre em `/demandas/<id>`: criticidade, responsável, situação, aguardando quem, condomínio, prazo do e-mail e prazo combinado gravam ao mudar; "Registrar andamento", "Marcar 1ª resposta" (agora ou no horário informado), "Concluir", "Arquivar" (com motivo) e "Reabrir"; link do e-mail no Outlook. Bloco **Análise** logo abaixo do título (Pedido, O que a DF faz, Próximo passo), editável e com log; na lista, o "O que a DF faz" aparece embaixo do título, e o Excel tem as três colunas. Situações: Aberta, Em andamento, Aguardando, **Reunião** (agendamento de reunião; conta como aberta em tudo: indicadores, "Em aberto", Excel e GET), Concluída e Arquivada; a lista tem o filtro "Reunião" ao lado de "Aguardando terceiros". "Aguardando quem": DF, BGRE, Administradora, Locatário, Corretora, Fornecedor. Condomínio: um do cadastro, **"Toda a carteira"** (demanda que envolve todos os condomínios BGRE; `todaCarteira`, sem condomínio ligado) ou vazio; o filtro "Sem condomínio" não inclui as de toda a carteira. "Registrar demanda" (`/demandas/nova`) para o que chegou por telefone, reunião ou WhatsApp, com o horário em que chegou.
-- **SLA:** `/demandas/sla`. Padrão (o do Einstein): Crítica 1 h corrida / 4 h corridas (plano de ação); Urgente 4 h / 1 dia útil; Ordinária 1 du / 5 du; Complexa 2 du / prazo combinado (até 10 du). Dias úteis mantêm o horário e pulam sábado, domingo e (com a opção marcada) os feriados nacionais e de São Paulo; chegada em dia não útil conta das 8h do próximo dia útil. O prazo escrito no e-mail vale até 23h59 daquele dia e, com a opção marcada, prevalece sobre a conclusão do SLA. Em "prazo combinado", a conclusão é o "prazo combinado" anotado na demanda (sem ele, o do e-mail; sem nenhum, "a combinar"). Mudar o SLA recalcula as abertas.
-- **Integração (Triagem Contratante):** `https://bgre.gestaodfsindicos.tech/api/integracao/demandas`, cabeçalho `Authorization: Bearer $DEMANDAS_TOKEN`. Sem o segredo no servidor: 503; senha errada: 401.
-  - **POST** (JSON, até 5 MB, com `Content-Length`), lote de 1 a 100 mensagens:
-    ```
-    { "mensagens": [ {
-        "conversationId": "AAQkAD…",            // ID da conversa do Outlook (obrigatório)
-        "internetMessageId": "<abc@exemplo>",   // chave da mensagem (obrigatório; a mesma nas três caixas)
-        "assunto": "RE: Pedido de laudo",       // sem "titulo", o título da demanda sai daqui, sem RE:/ENC:/FW:
-        "remetenteNome": "Fulano (BGRE)", "remetenteEmail": "fulano@…",
-        "enviadoEm": "2026-10-30T16:42:00-03:00",  // ISO 8601 com fuso: o relógio do SLA começa aqui
-        "caixa": "caixa-que-leu@dfsindicos.com.br",
-        "webLink": "https://outlook.office365.com/…",  // opcional, só https
-        "resumo": "Pede o laudo até 05/11.",          // texto que aparece na conversa
-        "demanda": true,                          // false = informativo: só registra se já houver demanda na conversa
-        "criticidadeSugerida": "ORDINARIA",       // opcional: CRITICA, URGENTE, ORDINARIA, COMPLEXA (aceita "Ordinária"); padrão ORDINARIA
-        "prazo": "2026-11-05",                    // opcional: prazo escrito no e-mail (AAAA-MM-DD)
-        "condominio": "Nome do prédio",           // opcional: casado pelo nome sem acento, caixa, pontuação e parênteses; sem achar = vazio.
-                                                  // "Toda a carteira", "todos", "todos os condomínios" ou "portfólio" = toda a carteira
-        "todaCarteira": false,                    // opcional: true = demanda de toda a carteira (o mesmo que "Toda a carteira" em condominio)
-        "titulo": "Enviar o laudo do gerador à BGRE",  // opcional: título como ação, até 120 caracteres (só na criação)
-        "pedido": "“Favor enviar o laudo até 05/11.”",  // opcional: o que a BGRE pediu, com a frase original (até 5000)
-        "oQueFazer": "Pedir o laudo à administradora e enviar à BGRE.",  // opcional: a ação da DF, em verbos (até 2000)
-        "proximoPasso": "Cobrar a administradora amanhã.",  // opcional: texto curto (até 500)
-        "situacaoSugerida": "AGUARDANDO",         // opcional: ABERTA, EM_ANDAMENTO, AGUARDANDO ou REUNIAO (aceita "Em andamento", "Reunião"); nunca conclui nem arquiva
-        "aguardando": "ADMINISTRADORA",           // opcional: DF, BGRE, ADMINISTRADORA, LOCATARIO, CORRETORA ou FORNECEDOR (aceita "Locatário")
-        "reuniao": false,                         // opcional, atalho antigo de situacaoSugerida "REUNIAO" (só na criação)
-        "responsavel": "pessoa@dfsindicos.com.br", // opcional, só na criação (carga do Planner)
-        "origemPlanner": "[BGRE] título do card"  // opcional: carga única dos cards antigos (origem PLANNER)
-    } ] }
-    ```
-    **A tela manda; a rotina só sugere.** Na criação vale tudo o que veio (situação padrão ABERTA). **DF em cópia** (a BGRE pede algo à administradora e a DF só está em cópia): `demanda: true`, `situacaoSugerida: "AGUARDANDO"`, `aguardando: "ADMINISTRADORA"`. Numa demanda que já existe, a mensagem nova atualiza `pedido`, `oQueFazer`, `proximoPasso`, `situacaoSugerida` (só em demanda aberta) e `aguardando`, **campo por campo, só se nenhuma pessoa o mudou pela tela depois da última gravação da rotina** (pelo `LogAlteracao`); título, condomínio e criticidade de demanda existente não mudam pelo POST. Cada mudança da rotina grava `LogAlteracao` com o e-mail "rotina Triagem Contratante" e aparece na linha do tempo. Texto vazio ou `null` = não mexe.
-    Regras: mensagem já gravada (`internetMessageId`) = duplicada, nada muda (se veio com outro `conversationId`, ele passa a apontar para a mesma demanda); conversa sem demanda + `demanda: true` + remetente de fora da DF = demanda nova; conversa com demanda = atualização (mensagem na linha do tempo; a primeira de `@dfsindicos.com.br` depois da chegada marca a 1ª resposta; de fora da DF com `prazo` diferente atualiza o prazo do e-mail; com envio anterior à chegada, a chegada recua); o resto é ignorado. O lote é processado na ordem de `enviadoEm`. Resposta 200:
-    ```
-    { "criadas": 1, "atualizadas": 2, "duplicadas": 2, "ignoradas": 1, "primeirasRespostas": 1,
-      "mensagens": [ { "internetMessageId": "<abc@exemplo>", "acao": "criada" | "atualizacao" | "duplicada" | "ignorada", "numero": 41,
-                       "mudou": ["próximo passo", "situação"], "preservado": ["aguardando"] } ] }   // mudou/preservado só nas atualizações
-    ```
-    422 diz o campo fora do formato (`{ "erro": "Dados fora do formato em mensagens.0.enviadoEm: …" }`); 413 sem `Content-Length` ou acima de 5 MB.
-  - **PATCH** (JSON, até 5 MB, com `Content-Length`): reprocessamento da análise das demandas abertas (feito uma vez para as abertas antigas; pode repetir), de 1 a 100 por envio:
-    ```
-    { "demandas": [ {
-        "numero": 41,                                  // obrigatório
-        "titulo": "…", "pedido": "…", "oQueFazer": "…", "proximoPasso": "…",
-        "situacaoSugerida": "EM_ANDAMENTO", "aguardando": "LOCATARIO",
-        "condominio": "Nome do prédio" | "Toda a carteira", "todaCarteira": false,
-        "criticidadeSugerida": "URGENTE"
-    } ] }
-    ```
-    Todos os campos menos `numero` são opcionais; ausente, vazio ou `null` = não mexe. Cada campo (título, pedido, o que a DF faz, próximo passo, situação, aguardando, condomínio, criticidade) só muda se nenhuma pessoa o mudou pela tela depois da última gravação da rotina; pedido, "o que a DF faz" e próximo passo são novos, então na primeira vez sempre entram. Demanda concluída, arquivada ou inexistente é recusada (as outras do lote seguem). Condomínio não achado no cadastro fica como estava, com aviso. Resposta 200:
-    ```
-    { "alteradas": 40, "semMudanca": 20, "recusadas": 2,
-      "demandas": [ { "numero": 41, "mudou": ["pedido", "o que a DF faz", "criticidade"], "preservado": ["título"],
-                      "aviso": "condomínio \"…\" não achado no cadastro" (opcional), "erro": "…" (só nas recusadas) } ] }
-    ```
-  - **GET** `?abertas=1` (para o e-mail diário [Triagem]): as demandas abertas (Aberta, Em andamento, Aguardando, Reunião), por número; `condominio` traz "Toda a carteira" nas de toda a carteira:
-    ```
-    { "demandas": [ { "numero": 41, "titulo": "…", "condominio": "…" | "Toda a carteira" | null,
-        "pedido": "…" | null, "oQueFazer": "…" | null, "proximoPasso": "…" | null, "criticidade": "URGENTE",
-        "chegadaEm": "ISO", "primeiraRespostaEm": "ISO" | null, "primeiraRespostaAte": "ISO" | null,
-        "prazo": "ISO" | null, "prazoOrigem": "email" | "sla" | "combinado" | "a-combinar", "vencida": false,
-        "situacao": "ABERTA" | "EM_ANDAMENTO" | "AGUARDANDO" | "REUNIAO", "situacaoPrazo": "Vence 05/11", "aguardando": "LOCATARIO" | … | null, "responsavel": "…" | null,
-        "link": "https://outlook…" | null, "pagina": "https://bgre.gestaodfsindicos.tech/demandas/<id>" } ] }
-    ```
-  - Exemplo: `curl -sf -X POST -H "Authorization: Bearer $DEMANDAS_TOKEN" -H "Content-Type: application/json" --data-binary @/tmp/lote.json https://bgre.gestaodfsindicos.tech/api/integracao/demandas`.
-- **Antes de ligar a rotina:** criar o segredo `DEMANDAS_TOKEN` no ambiente `producao` (https://github.com/dfsindicos/carteira-bgre/settings/environments), rodar "VPS: deploy" (um deploy por vez) e pôr o mesmo valor no ambiente do Claude da rotina. A leitura das três caixas da equipe da DF é da própria rotina (como no Einstein).
-
+## Demandas da BGRE (saíram em 2026-11-11)
+Foram para o Demandas Proprietários: https://demandas.gestaodfsindicos.tech (operação em `dfsindicos/demandas-proprietarios`, `docs/operacao.md`). Aqui, `/demandas` redireciona para lá; as tabelas antigas ficam no banco sem uso. O segredo `DEMANDAS_TOKEN` deste repositório pode ser apagado em https://github.com/dfsindicos/carteira-bgre/settings/environments.
