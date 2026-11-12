@@ -141,4 +141,9 @@ describe("cadastro mestre", () => {
     const semToken = await executarSincronizacao(new Date(), (async () => Response.json(mestre())) as unknown as typeof fetch);
     expect(semToken).toEqual({ ok: false, erro: "INTEGRACAO_TOKEN não configurado no servidor." });
   });
+  it("sem nenhum condomínio ligado no Action Log não faz nada (trava antes de marcar as chaves)", async () => {
+    const antes = await prisma.condominio.count({ where: { ativo: true } });
+    await expect(sincronizarComMestre({ condominios: [], administradoras: [], proprietarios: [] })).rejects.toThrow("nada foi feito");
+    expect(await prisma.condominio.count({ where: { ativo: true } })).toBe(antes);
+  });
 });

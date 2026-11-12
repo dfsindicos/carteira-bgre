@@ -53,6 +53,9 @@ function acharLocal<T extends ComNome>(linhas: T[], m: { codigo: string; nome: s
 
 export async function sincronizarComMestre(entrada: unknown, agora = new Date()): Promise<ResumoSincronizacao> {
   const d = esquema.parse(entrada);
+  // Trava: sem nenhum condomínio ligado à Carteira BGRE no Action Log (ex.: antes de marcar as chaves), não faz nada;
+  // senão a primeira leitura inativaria todos os condomínios daqui. Vira "falhou" com o motivo na tela.
+  if (!d.condominios.some((c) => c.ativo)) throw new Error("nenhum condomínio ligado à Carteira BGRE no Action Log (Configurações → Sistemas): nada foi feito");
   const r: ResumoSincronizacao = {
     administradoras: { ligadas: 0, criadas: 0, renomeadas: 0 },
     condominios: { criados: 0, atualizados: 0, inativados: 0 },
