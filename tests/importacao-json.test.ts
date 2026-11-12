@@ -33,7 +33,7 @@ const rodar = async (avaliacoes: unknown[], o: Parameters<typeof importarJson>[2
 
 describe("nomes", () => {
   it("normaliza sem acento, caixa, pontuação e parênteses; sugere o mais parecido", () => {
-    expect(normalizarNome("Centenário (CTN)")).toBe("centenario");
+    expect(normalizarNome("Vitória Demo (VTD)")).toBe("vitoria demo");
     expect(normalizarNome("  TORRE-teste. ")).toBe("torre teste");
     const lista = [{ nome: "Torre Teste" }, { nome: "Parque Sul" }];
     expect(candidato("Torre Testes Norte", lista)?.nome).toBe("Torre Teste");

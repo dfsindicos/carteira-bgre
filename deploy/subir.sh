@@ -23,13 +23,24 @@ echo "Construindo e subindo a versão $VERSAO..."
 compose build
 compose up -d --remove-orphans
 
+# Quando o app não sobe, o log do Actions mostra o estado dos contêineres e só trechos fixos e sem dado das mensagens
+# (códigos do Prisma, variável que falta, memória), contados; nunca o texto do app, que pode trazer nome de condomínio
+# ou e-mail (revisão de segurança de 2026-11-12). O texto completo fica no terminal da VPS: docker logs <contêiner>.
+resumo_da_falha() {
+  compose ps -a --format '{{.Service}}: {{.State}} · {{.Status}}'
+  echo "Trechos conhecidos nas últimas 200 linhas de app e migrar (contagem):"
+  compose logs --no-color --tail 200 app migrar 2>&1 \
+    | grep -oE 'P[0-9]{4}|Environment variable not found: [A-Z_]+|[A-Z_]+ ausente|EADDRINUSE|ECONNREFUSED|ENOTFOUND|out of memory|heap limit|Killed|Error' \
+    | sort | uniq -c || echo "  nenhum"
+}
+
 echo "Conferindo /api/saude..."
 for i in $(seq 1 60); do
   if curl -fs --max-time 5 "http://127.0.0.1:$PORTA/api/saude" >/dev/null 2>&1; then
     echo "Saúde ok: $(curl -fsS "http://127.0.0.1:$PORTA/api/saude")"
     break
   fi
-  [ "$i" = 60 ] && { echo "A aplicação não respondeu em 5 minutos." >&2; compose logs --tail 80 app migrar >&2; exit 1; }
+  [ "$i" = 60 ] && { echo "A aplicação não respondeu em 5 minutos." >&2; resumo_da_falha >&2; exit 1; }
   sleep 5
 done
 
