@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { criarAvaliacao, marcarPassos, mudarPrazo, salvarAcompanhamento, salvarCampo, type NumeroPasso, type Resposta } from "@/lib/avaliacoes";
 import { salvarAdministradora, salvarCondominio } from "@/lib/cadastro";
+import { executarSincronizacao } from "@/lib/mestre";
 import { formatarPeriodo, lerPeriodo, lerTipo } from "@/lib/scorecard";
 import { sessaoAtual } from "@/lib/sessao";
 
@@ -56,6 +57,14 @@ export async function acaoSalvarAdministradora(form: FormData): Promise<Resposta
   const r = await salvarAdministradora(email, { id: texto(form, "id") || undefined, nome: texto(form, "nome"), emails: texto(form, "emails") });
   revalidatePath("/", "layout");
   return r;
+}
+
+/** Cadastro mestre: lê o Action Log agora, sem esperar a hora cheia. */
+export async function acaoSincronizarMestre(): Promise<Resposta> {
+  await sessaoAtual();
+  const r = await executarSincronizacao();
+  revalidatePath("/", "layout");
+  return r.ok ? { ok: true } : { ok: false, erro: `Não deu para ler o Action Log: ${r.erro}` };
 }
 
 export async function acaoSalvarCondominio(form: FormData): Promise<Resposta> {

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { prisma } from "./db";
 import { aplicarPassos, dataSP, registrar, type NumeroPasso, type Tx } from "./avaliacoes";
-import { gravarNotas, normalizar } from "./importacao";
+import { gravarNotas } from "./importacao";
+import { normalizarNome } from "./comum";
 import { MODELOS, TIPOS, calcular, formatarNota, formatarPeriodo, lerPeriodo, prazoPadrao, type Notas, type Tipo } from "./scorecard";
 
 // Importação do JSON do artefato "Checklist Avaliações BGRE": checklist (4 passos com data), andamento e estimativa e,
@@ -39,8 +40,7 @@ export const esquemaJson = z.object({
 });
 export type EntradaJson = z.infer<typeof esquemaAvaliacao>;
 
-/** Nome para casar com o cadastro: sem acento, caixa, pontuação e o texto entre parênteses ("Torre (CTN)" = "torre"). */
-export const normalizarNome = (s: string) => normalizar(s.replace(/\([^)]*\)/g, " "));
+export { normalizarNome };
 
 /** Cadastro mais parecido, pelas palavras em comum (ou um nome contido no outro), para sugerir na simulação. */
 export function candidato<T extends { nome: string }>(nome: string, lista: T[]): T | null {

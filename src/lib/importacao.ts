@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import { prisma } from "./db";
+import { normalizar } from "./comum";
 import { MODELOS, calcular, formatarNota, formatarPeriodo, prazoPadrao, type Notas, type Periodo, type Tipo } from "./scorecard";
 
 // Importação das avaliações já entregues à BGRE, a partir das planilhas do modelo oficial da Brookfield (uma por prédio,
@@ -43,8 +44,7 @@ export type Linha = {
   resultado?: "importada" | "pulada" | "substituída" | "sem mudança";
 };
 
-export const normalizar = (s: string) =>
-  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+export { normalizar };
 
 const arred = (v: number) => Math.round(v * 100) / 100;
 

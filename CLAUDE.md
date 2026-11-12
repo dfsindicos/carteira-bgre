@@ -43,6 +43,10 @@ Mensagem em português, imperativo, uma linha de assunto e corpo explicando a de
 
 - **Login Microsoft só para a equipe da DF:** uma pessoa de administradora entrou no Vistorias como convidada do diretório Microsoft da DF; a mesma brecha existia aqui. O e-mail precisa ser de domínio da DF (`src/lib/acesso.ts`; `LOGIN_DOMINIOS` e `LOGIN_EMAILS` opcionais), convidado é recusado no login (tela "Esta conta não tem acesso") e a sessão de quem não passa cai em qualquer leitura.
 
+## Cadastro mestre (2026-11-12)
+
+- **Decisão do usuário: "o mestre fica no Action Log".** Condomínios e administradoras vêm de lá de hora em hora (`deploy/subir.sh` → `POST /api/cron/mestre` com `CRON_SECRET`, `src/lib/mestre.ts`; token `INTEGRACAO_TOKEN`, copiado de `/opt/gestao/integracao-token` pelo deploy). Casa pelo `codigoMestre`; na primeira vez, pelo nome ou pelos outros nomes (`acharCondominioPorNome` em `src/lib/comum.ts`: o parênteses conta). Ligado: entra, nome e administradora seguem o mestre. Desligado ou arquivado: inativo aqui, nada se apaga. Só daqui: não é tocado. **Nunca mexe em `Administradora.emails`, `flashSlug`, "avaliado desde" nem avaliações.** Log com `cadastro-mestre@actionlog`; resultado em `SincronizacaoMestre`, mostrado na tela Cadastro com "Sincronizar agora". Ver `docs/operacao.md`. Testes em `tests/mestre.test.ts`.
+
 ## Demandas da BGRE: saíram daqui em 2026-11-11
 
 - **Pedido do usuário de 2026-11-11:** as demandas da BGRE foram para o sistema **Demandas Proprietários** (`dfsindicos/demandas-proprietarios`, https://demandas.gestaodfsindicos.tech), junto com os outros proprietários. A migração (workflow "VPS: migrar BGRE" de lá) levou demandas, mensagens, histórico e condomínios com os mesmos números; a rotina Triagem Contratante grava lá desde então.

@@ -49,8 +49,11 @@ services:
       MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
-      # Segredo das tarefas do cron da VPS (/api/cron/*); ainda sem uso nesta entrega.
+      # Segredo das tarefas do cron da VPS (/api/cron/*): hoje, a leitura do cadastro mestre de hora em hora.
       CRON_SECRET: ${CRON_SECRET:-}
+      # Cadastro mestre (leitura do Action Log); o deploy copia de /opt/gestao/integracao-token.
+      INTEGRACAO_TOKEN: ${INTEGRACAO_TOKEN:-}
+      MESTRE_URL: ${MESTRE_URL:-}
       # Senha da rotina que grava o Flash Report (/api/integracao/flash).
       FLASH_TOKEN: ${FLASH_TOKEN:-}
     healthcheck:
