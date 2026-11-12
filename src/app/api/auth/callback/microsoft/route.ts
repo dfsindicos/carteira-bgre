@@ -3,6 +3,7 @@ import { z } from "zod";
 import { configMicrosoft, concluirLogin } from "@/lib/microsoft";
 import { COOKIE_SESSAO, OPCOES_COOKIE, criarSessao } from "@/lib/sessao";
 import { ForaDaDF } from "@/lib/acesso";
+import { urlDoDestino } from "@/lib/destino";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
     return falhou(erro instanceof Error ? erro.message : String(erro), erro instanceof ForaDaDF ? "acesso" : "microsoft");
   }
 
-  const resposta = NextResponse.redirect(new URL(estado.next, base));
+  const resposta = NextResponse.redirect(urlDoDestino(estado.next, base));
   resposta.cookies.delete(COOKIE_ESTADO);
   resposta.cookies.set(COOKIE_SESSAO, token, OPCOES_COOKIE);
   return resposta;

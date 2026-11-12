@@ -2,8 +2,11 @@ import { SignJWT, jwtVerify } from "jose";
 import { emailPermitido } from "./acesso";
 
 // Sessão em cookie assinado (HS256 com AUTH_SECRET); a mesma função serve ao middleware (Edge) e às rotas.
+// Vale 12 h e é renovada pelo middleware quando já passou da metade (renovação deslizante): quem usa o sistema não
+// percebe; quem fica 12 h sem abrir entra de novo. Não há lista de sessões no banco: o corte de emergência de todas é
+// trocar o AUTH_SECRET (ver docs/operacao.md, "Login").
 export const COOKIE_SESSAO = "sessao";
-const DURACAO_S = 60 * 60 * 24 * 30;
+export const DURACAO_S = 60 * 60 * 12;
 
 export type Sessao = { nome: string; email: string };
 
@@ -22,14 +25,25 @@ export function criarSessao(sessao: Sessao) {
  * (ver `emailPermitido`) ou o servidor estiver sem AUTH_SECRET.
  */
 export async function lerSessao(token: string | undefined): Promise<Sessao | null> {
+  return (await lerSessaoComPrazo(token))?.sessao ?? null;
+}
+
+/** Como `lerSessao`, mais o vencimento (segundos desde 1970), para o middleware decidir a renovação. */
+export async function lerSessaoComPrazo(token: string | undefined): Promise<{ sessao: Sessao; venceEm: number } | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, chave(), { algorithms: ["HS256"] });
     if (typeof payload.nome !== "string" || typeof payload.email !== "string" || !emailPermitido(payload.email)) return null;
-    return { nome: payload.nome, email: payload.email };
+    if (typeof payload.exp !== "number") return null;
+    return { sessao: { nome: payload.nome, email: payload.email }, venceEm: payload.exp };
   } catch {
     return null;
   }
+}
+
+/** Token novo se a sessão já passou da metade da validade; senão null (o cookie atual continua). */
+export async function renovarSeNecessario(lida: { sessao: Sessao; venceEm: number }, agoraS = Math.floor(Date.now() / 1000)) {
+  return lida.venceEm - agoraS < DURACAO_S / 2 ? criarSessao(lida.sessao) : null;
 }
 
 export const OPCOES_COOKIE = {

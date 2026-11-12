@@ -21,5 +21,23 @@ describe("middleware: sem login não entra", () => {
     const ok = await middleware(new NextRequest("http://localhost/", { headers: { cookie: `${COOKIE_SESSAO}=${token}` } }));
     expect(ok.status).toBe(200);
     expect(ok.headers.get("x-middleware-next")).toBe("1");
+    expect(ok.cookies.get(COOKIE_SESSAO)).toBeUndefined();
+  });
+
+  it("renova o cookie da sessão que já passou da metade das 12 h", async () => {
+    const { SignJWT } = await import("jose");
+    const chave = new TextEncoder().encode(process.env.AUTH_SECRET);
+    const agora = Math.floor(Date.now() / 1000);
+    const velho = await new SignJWT({ nome: "Pessoa Teste", email: "pessoa@dfsindicos.com.br" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt(agora - 8 * 3600)
+      .setExpirationTime(agora + 4 * 3600)
+      .sign(chave);
+    const ok = await middleware(new NextRequest("http://localhost/", { headers: { cookie: `${COOKIE_SESSAO}=${velho}` } }));
+    expect(ok.status).toBe(200);
+    const renovado = ok.cookies.get(COOKIE_SESSAO);
+    expect(renovado?.value).toBeTruthy();
+    expect(renovado?.value).not.toBe(velho);
+    expect(renovado?.maxAge).toBe(12 * 3600);
   });
 });

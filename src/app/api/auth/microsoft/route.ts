@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { configMicrosoft, inicioLogin } from "@/lib/microsoft";
+import { destinoSeguro } from "@/lib/destino";
 
 export const dynamic = "force-dynamic";
-
-// Só caminhos internos: um "next" como //site.com ou https://... viraria redirecionamento aberto.
-function destinoSeguro(next: string | null) {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
-}
 
 export async function GET(request: NextRequest) {
   const config = configMicrosoft();

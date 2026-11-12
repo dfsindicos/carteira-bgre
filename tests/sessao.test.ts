@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { criarSessao, lerSessao } from "@/lib/sessao";
+import { DURACAO_S, criarSessao, lerSessao, lerSessaoComPrazo, renovarSeNecessario } from "@/lib/sessao";
 import { emailPermitido } from "@/lib/acesso";
 
 process.env.AUTH_SECRET = "segredo-de-teste-com-mais-de-trinta-e-dois-caracteres";
@@ -22,6 +22,23 @@ describe("sessão", () => {
     process.env.AUTH_SECRET = "segredo-de-teste-com-mais-de-trinta-e-dois-caracteres";
     const token = await criarSessao({ nome: "Pessoa de Fora", email: "pessoa@administradora.com.br" });
     expect(await lerSessao(token)).toBeNull();
+  });
+});
+
+describe("sessão de 12 h com renovação deslizante", () => {
+  it("vale 12 h e só é renovada depois da metade", async () => {
+    process.env.AUTH_SECRET = "segredo-de-teste-com-mais-de-trinta-e-dois-caracteres";
+    expect(DURACAO_S).toBe(12 * 60 * 60);
+    const agora = Math.floor(Date.now() / 1000);
+    const lida = await lerSessaoComPrazo(await criarSessao({ nome: "Pessoa Teste", email: "pessoa@dfsindicos.com.br" }));
+    expect(lida).not.toBeNull();
+    expect(lida!.venceEm - agora).toBeGreaterThan(DURACAO_S - 5);
+    expect(lida!.venceEm - agora).toBeLessThanOrEqual(DURACAO_S);
+    expect(await renovarSeNecessario(lida!, agora)).toBeNull();
+    const depois = agora + DURACAO_S / 2 + 60;
+    const novo = await renovarSeNecessario(lida!, depois);
+    expect(novo).toEqual(expect.any(String));
+    expect((await lerSessaoComPrazo(novo!))!.sessao).toEqual({ nome: "Pessoa Teste", email: "pessoa@dfsindicos.com.br" });
   });
 });
 
