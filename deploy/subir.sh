@@ -37,11 +37,14 @@ ln -sfn "$REL" "$BASE/atual"
 
 # Tarefas do servidor (horários em UTC; Brasília = UTC-3). 8h05 UTC: os outros sistemas fazem backup às 6h05, 6h35,
 # 7h05 e 7h35, e dois pg_dump ao mesmo tempo disputam a memória da VPS.
+( umask 077; printf 'Authorization: Bearer %s\n' "$(cat "$BASE/cron-secret")" > "$BASE/cron-cabecalho" )
 cat > /etc/cron.d/bgre <<CRON
 # Gerado pelo deploy da Carteira BGRE. Não edite aqui: edite deploy/subir.sh.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 5 8 * * *  root $BASE/atual/deploy/backup.sh >> /var/log/bgre/backup.log 2>&1
+# Cadastro mestre: lê o Action Log de hora em hora (o cabeçalho com o CRON_SECRET fica num arquivo, fora da linha de comando).
+29 * * * *  root curl -fsS -X POST --max-time 150 -H @$BASE/cron-cabecalho http://127.0.0.1:$PORTA/api/cron/mestre >> /var/log/bgre/mestre.log 2>&1
 CRON
 chmod 644 /etc/cron.d/bgre
 

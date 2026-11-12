@@ -10,12 +10,14 @@ datasource db {
 }
 
 model Administradora {
-  id          String       @id @default(cuid())
-  nome        String       @unique
+  id           String       @id @default(cuid())
+  nome         String       @unique
   // E-mails que vão receber o pedido de evidências (2ª entrega), separados por vírgula ou linha.
-  emails      String       @default("")
-  condominios Condominio[]
-  criadoEm    DateTime     @default(now())
+  emails       String       @default("")
+  // Código da administradora no cadastro mestre (Action Log, decisão do usuário de 2026-11-12); nulo = ainda não ligada.
+  codigoMestre String?      @unique
+  condominios  Condominio[]
+  criadoEm     DateTime     @default(now())
 }
 
 model Condominio {
@@ -31,6 +33,8 @@ model Condominio {
   avaliacoes             Avaliacao[]
   // Identificador do prédio no Flash Report ("torre-norte"): liga os dados da rotina ao cadastro.
   flashSlug              String?        @unique
+  // Código do condomínio no cadastro mestre (Action Log, decisão do usuário de 2026-11-12); nulo = só existe aqui.
+  codigoMestre           String?        @unique
   flashSemanas           FlashSemana[]
   demandas               Demanda[]
   criadoEm               DateTime       @default(now())
@@ -270,4 +274,13 @@ model OpcoesSlaDemanda {
   prazoEmailPrevalece Boolean  @default(true)
   atualizadoEm        DateTime @updatedAt
   atualizadoPor       String
+}
+
+// Cadastro mestre (decisão do usuário de 2026-11-12: "o mestre fica no Action Log"): cada leitura do Action Log, com o
+// resumo do que mudou (ok) ou o erro (falha). Ver src/lib/mestre.ts.
+model SincronizacaoMestre {
+  id     String   @id @default(cuid())
+  em     DateTime @default(now())
+  ok     Boolean
+  resumo Json
 }

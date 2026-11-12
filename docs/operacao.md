@@ -7,8 +7,9 @@ Mesmo modelo do Vistorias e do Action Log: tudo na VPS roda pelo GitHub Actions,
 - Projeto compose `bgre` (contêineres `bgre-db-1`, `bgre-migrar-1`, `bgre-app-1`; volume `bgre_dados`), banco `bgre`.
 - O app escuta só em `127.0.0.1:3004`. O HTTPS de `bgre.gestaodfsindicos.tech` é do Caddy compartilhado (`dfsindicos/vps-gestaodfsindicos`).
 - Docker, rclone e SSH só por chave vêm da preparação que o deploy do Action Log já faz.
-- Segredos gerados no próprio servidor na primeira vez e mantidos: `/opt/bgre/db-password` (senha do banco), `/opt/bgre/auth-secret` (assinatura da sessão) e `/opt/bgre/cron-secret` (tarefas do cron, sem uso nesta entrega). **Não apague o `db-password`**: o banco foi criado com essa senha.
+- Segredos gerados no próprio servidor na primeira vez e mantidos: `/opt/bgre/db-password` (senha do banco), `/opt/bgre/auth-secret` (assinatura da sessão) e `/opt/bgre/cron-secret` (tarefas do cron; o deploy grava o cabeçalho dele em `/opt/bgre/cron-cabecalho`, com permissão 600). **Não apague o `db-password`**: o banco foi criado com essa senha.
 - Backup diário às 5h05 de Brasília (8h05 UTC, depois dos backups dos outros sistemas), pelo cron gravado pelo deploy em `/etc/cron.d/bgre`, em `/var/backups/bgre`, 14 dias. Log em `/var/log/bgre/backup.log`.
+- Cadastro mestre: o mesmo cron chama `POST /api/cron/mestre` no minuto 29 de cada hora. Log em `/var/log/bgre/mestre.log`.
 - A cópia externa usa o rclone já configurado no servidor pelo Action Log (mesmo OneDrive), 30 dias lá. Este repositório não grava `rclone.conf`.
 
 ## Workflows (todos por disparo manual)
@@ -35,7 +36,7 @@ Mesmo modelo do Vistorias e do Action Log: tudo na VPS roda pelo GitHub Actions,
 Sem `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` no GitHub: nascem no servidor (acima).
 
 ## `.env` do servidor (`/opt/bgre/.env`, escrito pelo deploy; não editar à mão)
-`MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `FLASH_TOKEN`, `APP_URL` (`https://<DOMINIO>`), `DOMINIO`, `BACKUP_DESTINO`, `RETENCAO_DIAS=14`, mais `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` lidos dos arquivos do servidor. Cada linha vai como `NOME='valor'`.
+`MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `FLASH_TOKEN`, `APP_URL` (`https://<DOMINIO>`), `DOMINIO`, `BACKUP_DESTINO`, `RETENCAO_DIAS=14`, mais `POSTGRES_PASSWORD`, `AUTH_SECRET` e `CRON_SECRET` lidos dos arquivos do servidor e `INTEGRACAO_TOKEN` copiado de `/opt/gestao/integracao-token` (gerado pelo deploy do Action Log; sem o arquivo, a linha não entra e a sincronização do cadastro mestre fica desligada). Cada linha vai como `NOME='valor'`.
 
 ## O que o usuário precisa fazer antes do primeiro deploy
 1. **Repositório no GitHub** `dfsindicos/carteira-bgre` e o ambiente `producao`: https://github.com/dfsindicos/carteira-bgre/settings/environments, com os segredos e variáveis da tabela.
@@ -105,6 +106,17 @@ Segunda parte da tela **Importar**, rota `/api/importar/json` (JSON, sessão, me
 - **Cadastro → "Modelos da BGRE":** envie a planilha oficial em .xlsx, uma da Administradora e uma da Sindicância (pode ser uma já preenchida de outro trimestre). O servidor só aceita o arquivo em que acha os rótulos do topo (Contratada, Local de Prestação ou Empreendimento, Período avaliado), a linha com "#", "Peso" e "Comentário" e todos os itens do Score Card do tipo. Fica no banco (`ModeloPlanilha`), com `LogAlteracao`.
 - **"Gerar planilha BGRE"** com modelo: preenche o cabeçalho, a nota (fração, no formato % do modelo) e o comentário de cada item direto no XML da aba do Score Card; refaz as fórmulas das marcas "X" de todos os itens (o modelo pode trazer "X" digitado à mão), tira os resultados guardados das fórmulas e a cadeia de cálculo e liga o recálculo ao abrir. Logo, estilos, fórmulas e as outras abas ficam como vieram. Nome do arquivo: "<prédio> - <3T26> - Planilha de Avaliação Administração/Sindicância.xlsx". Item sem nota fica em branco.
 - Conferência feita em 2026-10-27 com os modelos reais de um prédio da carteira (Administração e Sindicância), abrindo no LibreOffice com recálculo: índices por bloco e avaliação final saem das fórmulas da BGRE.
+
+## Cadastro mestre: Action Log (2026-11-12)
+Decisão do usuário: "o mestre fica no Action Log". De hora em hora (cron do minuto 29) e pelo botão "Sincronizar agora" na tela Cadastro (https://bgre.gestaodfsindicos.tech/cadastro), `src/lib/mestre.ts` lê `GET https://actionlog.gestaodfsindicos.tech/api/integracao/cadastro?sistema=bgre` com `Authorization: Bearer $INTEGRACAO_TOKEN` (`MESTRE_URL` troca o endereço, para testes) e acerta a cópia daqui numa transação, uma sincronização por vez (`pg_advisory_xact_lock`):
+
+- **Administradoras:** casam pelo código (`Administradora.codigoMestre`); na primeira vez, pelo nome sem acento, caixa e pontuação. Ligada, o nome segue o Action Log. Administradora nova só é criada quando um condomínio ligado precisa dela. **Os e-mails do pedido de evidências são daqui e nunca são tocados.**
+- **Condomínios:** casam pelo código (`Condominio.codigoMestre`); na primeira vez, pelo nome ou por um dos "outros nomes" do Action Log, só entre os que ainda não têm código. O texto entre parênteses conta ("O Parque (Torre 7)" e "O Parque (Cond. Geral)" são dois); sem ele, só casa com candidato único. Ligado para a Carteira BGRE: entra se faltar; nome e administradora seguem o Action Log; fica ativo. Desligado ou arquivado lá: fica inativo aqui, com avaliações, Flash Report e histórico. Condomínio que só existe aqui não é tocado e aparece em "Só aqui" na tela.
+- Flash Report (`flashSlug`), "avaliado desde" e avaliações são só daqui.
+- Nome que já existe aqui em outro cadastro não é aplicado: aparece como conflito na tela.
+- Tudo o que muda grava `LogAlteracao` com o e-mail `cadastro-mestre@actionlog`. Rodar de novo sem mudança no Action Log não muda nada nem grava log.
+- Cada leitura fica em `SincronizacaoMestre` (resumo ou erro). Falha (Action Log fora, token errado, formato estranho) é registrada e a cópia fica como estava; a tela mostra a última leitura e a última que deu certo.
+- Nome mudado aqui pela tela num condomínio ligado volta ao do Action Log na próxima leitura: para renomear, mude lá.
 
 ## Demandas da BGRE (saíram em 2026-11-11)
 Foram para o Demandas Proprietários: https://demandas.gestaodfsindicos.tech (operação em `dfsindicos/demandas-proprietarios`, `docs/operacao.md`). Aqui, `/demandas` redireciona para lá; as tabelas antigas ficam no banco sem uso. O segredo `DEMANDAS_TOKEN` deste repositório pode ser apagado em https://github.com/dfsindicos/carteira-bgre/settings/environments.
