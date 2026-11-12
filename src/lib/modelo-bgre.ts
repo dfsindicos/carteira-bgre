@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
+import { conferirDescompactado } from "./zip-seguro";
 import { registrar } from "./avaliacoes";
 import { prisma } from "./db";
 import { normalizar } from "./importacao";
@@ -36,6 +37,8 @@ const texto = (v: ExcelJS.CellValue): string => {
 export async function mapearModelo(modelo: Buffer, tipo: Tipo): Promise<Mapa> {
   // Só os valores e fórmulas interessam aqui; sem os desenhos (logo), que o exceljs não lê quando o modelo usa caminho
   // absoluto ("/xl/drawings/…"), como o da Sindicância.
+  // O modelo é um zip: confere o tamanho real descompactado antes de abrir (revisão de segurança de 2026-11-12).
+  await conferirDescompactado(modelo, 60 * 1024 * 1024);
   const zip = await JSZip.loadAsync(modelo);
   for (const f of Object.keys(zip.files).filter((n) => /^xl\/worksheets\/[^/]+\.xml$/.test(n)))
     zip.file(f, (await zip.file(f)!.async("string")).replace(/<(legacyDrawing|drawing)\b[^>]*\/>/g, ""));

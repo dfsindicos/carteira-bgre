@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
+import { conferirDescompactado, DescompactadoGrandeDemais, lerComLimite } from "./zip-seguro";
 import { prisma } from "./db";
 import { normalizar } from "./comum";
 import { MODELOS, calcular, formatarNota, formatarPeriodo, prazoPadrao, type Notas, type Periodo, type Tipo } from "./scorecard";
@@ -8,7 +9,7 @@ import { MODELOS, calcular, formatarNota, formatarPeriodo, prazoPadrao, type Not
 // trimestre e tipo: Administradora ou Sindicância). A tela simula (sem gravar) e depois importa os mesmos arquivos; nada
 // é guardado em disco. A importação do JSON do checklist fica em src/lib/importacao-json.ts.
 
-export const LIMITES = { planilhas: 200, xlsx: 5 * 1024 * 1024, zip: 60 * 1024 * 1024 };
+export const LIMITES = { planilhas: 200, xlsx: 5 * 1024 * 1024, zip: 60 * 1024 * 1024, xlsxAberto: 60 * 1024 * 1024 };
 
 export type Arquivo = { nome: string; bytes: Uint8Array };
 
@@ -100,8 +101,11 @@ export async function lerPlanilha(arquivo: string, bytes: Uint8Array): Promise<L
   const falha = (erro: string) => ({ ...lida, erro });
   const wb = new ExcelJS.Workbook();
   try {
+    // O .xlsx é um zip: confere o tamanho real descompactado antes de o ExcelJS abrir tudo na memória.
+    await conferirDescompactado(bytes, LIMITES.xlsxAberto);
     await wb.xlsx.load(bytes as unknown as ArrayBuffer);
-  } catch {
+  } catch (e) {
+    if (e instanceof DescompactadoGrandeDemais) return falha("Planilha grande demais depois de descompactada.");
     return falha("Não é uma planilha .xlsx válida.");
   }
 
@@ -228,15 +232,13 @@ export async function abrirArquivos(enviados: Arquivo[]): Promise<{ planilhas: A
       for (const f of Object.values(zip.files)) {
         const base = f.name.split("/").pop() ?? "";
         if (f.dir || f.name.includes("__MACOSX/") || base.startsWith("~$") || base.startsWith("._") || !/\.xlsx$/i.test(base)) continue;
-        // Confere o tamanho descompactado declarado antes de abrir (barra .zip que explode na memória).
-        const declarado = (f as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize ?? 0;
-        if (declarado > LIMITES.xlsx) {
+        // Conta os bytes reais ao descompactar e para no limite (o tamanho que o .zip declara pode ser falso).
+        try {
+          planilhas.push({ nome: base, bytes: new Uint8Array(await lerComLimite(f, LIMITES.xlsx)) });
+        } catch (e) {
+          if (!(e instanceof DescompactadoGrandeDemais)) throw e;
           erro(base, "Maior que 5 MB.");
-          continue;
         }
-        const bytes = await f.async("uint8array");
-        if (bytes.length > LIMITES.xlsx) erro(base, "Maior que 5 MB.");
-        else planilhas.push({ nome: base, bytes });
         if (planilhas.length > LIMITES.planilhas) break;
       }
     } else erro(a.nome, "Não é .xlsx nem .zip.");
