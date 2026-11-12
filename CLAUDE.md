@@ -52,3 +52,8 @@ Mensagem em português, imperativo, uma linha de assunto e corpo explicando a de
 - **Pedido do usuário de 2026-11-11:** as demandas da BGRE foram para o sistema **Demandas Proprietários** (`dfsindicos/demandas-proprietarios`, https://demandas.gestaodfsindicos.tech), junto com os outros proprietários. A migração (workflow "VPS: migrar BGRE" de lá) levou demandas, mensagens, histórico e condomínios com os mesmos números; a rotina Triagem Contratante grava lá desde então.
 - Aqui saíram as telas `/demandas` (redirecionam para o sistema novo), o endereço `/api/integracao/demandas`, as regras e os testes. **As tabelas `Demanda`, `MensagemDemanda`, `SlaDemanda` e `OpcoesSlaDemanda` ficam no banco, sem uso**: apagá-las é migração destrutiva e só com pedido explícito do usuário. O segredo `DEMANDAS_TOKEN` deste repositório deixou de ser usado.
 - O código antigo está no histórico do git (antes do PR "Tirar as demandas da Carteira BGRE").
+
+## Revisão de segurança, 2º lote (2026-11-12)
+
+- **Token próprio:** o deploy copia `/opt/gestao/tokens/bgre` para `INTEGRACAO_TOKEN` (o compartilhado só se ele não existir). O token da Carteira só lê `?sistema=bgre` no Action Log.
+- **Zip que explode na memória:** `src/lib/zip-seguro.ts` conta os bytes reais ao descompactar e para no limite: planilhas dentro do .zip (5 MB cada), .xlsx antes do ExcelJS e o modelo da BGRE (60 MB descompactados). Testes em `tests/zip-seguro.test.ts`.

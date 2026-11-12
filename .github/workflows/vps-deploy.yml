@@ -63,9 +63,9 @@ jobs:
           # A senha do banco, o AUTH_SECRET (assinatura da sessão) e o CRON_SECRET nascem no próprio servidor na primeira
           # vez e ficam lá (/opt/bgre/db-password, auth-secret, cron-secret): três segredos a menos para cadastrar, e
           # trocar de versão não derruba ninguém. Não apague db-password: o banco já foi criado com essa senha.
-          # INTEGRACAO_TOKEN (leitura do cadastro mestre no Action Log) vem de /opt/gestao/integracao-token, gerado pelo
+          # INTEGRACAO_TOKEN (leitura do cadastro mestre no Action Log) vem de /opt/gestao/tokens/bgre (o compartilhado só se ele não existir), gerado pelo
           # deploy do Action Log; sem o arquivo, a sincronização fica desligada e a tela de Cadastro mostra o erro.
-          printf '%s\n' "$conteudo" | ssh "root@$VPS_HOST" 'set -e; umask 077; d=/opt/bgre; cat > $d/.env.novo; [ -s $d/db-password ] || openssl rand -hex 24 > $d/db-password; for s in auth-secret cron-secret; do [ -s $d/$s ] || openssl rand -hex 32 > $d/$s; done; printf "POSTGRES_PASSWORD=%s\nAUTH_SECRET=%s\nCRON_SECRET=%s\n" "$(cat $d/db-password)" "$(cat $d/auth-secret)" "$(cat $d/cron-secret)" >> $d/.env.novo; if [ -s /opt/gestao/integracao-token ]; then printf "INTEGRACAO_TOKEN=%s\n" "$(cat /opt/gestao/integracao-token)" >> $d/.env.novo; fi; mv $d/.env.novo $d/.env'
+          printf '%s\n' "$conteudo" | ssh "root@$VPS_HOST" 'set -e; umask 077; d=/opt/bgre; cat > $d/.env.novo; [ -s $d/db-password ] || openssl rand -hex 24 > $d/db-password; for s in auth-secret cron-secret; do [ -s $d/$s ] || openssl rand -hex 32 > $d/$s; done; printf "POSTGRES_PASSWORD=%s\nAUTH_SECRET=%s\nCRON_SECRET=%s\n" "$(cat $d/db-password)" "$(cat $d/auth-secret)" "$(cat $d/cron-secret)" >> $d/.env.novo; t=/opt/gestao/tokens/bgre; [ -s $t ] || t=/opt/gestao/integracao-token; if [ -s $t ]; then printf "INTEGRACAO_TOKEN=%s\n" "$(cat $t)" >> $d/.env.novo; fi; mv $d/.env.novo $d/.env'
           echo "URL: $APP_URL · cópia externa do backup: ${BACKUP_DESTINO:-desligada} · login Microsoft: $([ -n "$MICROSOFT_TENANT_ID" ] && [ -n "$MICROSOFT_CLIENT_ID" ] && [ -n "$MICROSOFT_CLIENT_SECRET" ] && echo ligado || echo "desligado (faltam MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID ou MICROSOFT_CLIENT_SECRET)")"
 
       - name: Subir e conferir a saúde
