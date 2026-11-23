@@ -5,7 +5,7 @@ import { prisma } from "./db";
 import { normalizar } from "./comum";
 import { MODELOS, calcular, formatarNota, formatarPeriodo, prazoPadrao, type Notas, type Periodo, type Tipo } from "./scorecard";
 
-// Importação das avaliações já entregues à BGRE, a partir das planilhas do modelo oficial da Brookfield (uma por prédio,
+// Importação das avaliações já entregues à BGRE, a partir das planilhas do modelo oficial da BGRE (uma por prédio,
 // trimestre e tipo: Administradora ou Sindicância). A tela simula (sem gravar) e depois importa os mesmos arquivos; nada
 // é guardado em disco. A importação do JSON do checklist fica em src/lib/importacao-json.ts.
 

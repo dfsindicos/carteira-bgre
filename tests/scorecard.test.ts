@@ -19,7 +19,7 @@ import {
 const todas = (v: number) => Object.fromEntries(CODIGOS.map((c) => [c, v]));
 
 describe("Score Card", () => {
-  it("tem os 4 grupos com os pesos da Brookfield e os 16 itens", () => {
+  it("tem os 4 grupos com os pesos da BGRE e os 16 itens", () => {
     expect(GRUPOS.map((g) => g.peso)).toEqual([0.15, 0.35, 0.25, 0.25]);
     expect(GRUPOS.map((g) => g.itens.length)).toEqual([1, 8, 4, 3]);
     expect(CODIGOS).toHaveLength(16);

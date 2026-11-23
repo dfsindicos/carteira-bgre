@@ -23,7 +23,7 @@ type Opcoes = {
   nota35?: number | string;
 };
 
-/** Planilha sintética no layout do modelo da Brookfield: C4:N56, colunas Item | # | Descrição | Peso | … | Comentário. */
+/** Planilha sintética no layout do modelo da BGRE: C4:N56, colunas Item | # | Descrição | Peso | … | Comentário. */
 async function planilha(o: Opcoes = {}): Promise<Uint8Array> {
   const notas: Record<string, number | string | null> = { ...Object.fromEntries(CODIGOS.map((c, i) => [c, (90 + (i % 9)) / 100])), ...o.notas };
   const wb = new ExcelJS.Workbook();

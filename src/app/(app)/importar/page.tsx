@@ -9,7 +9,7 @@ export default function PaginaImportar() {
       <section className="grid gap-3">
         <h2 className="text-lg font-bold">Planilhas do Score Card</h2>
         <p className="text-[14px] text-suave">
-          Planilhas no modelo da Brookfield, da Administradora ou da Sindicância, uma por prédio e trimestre: várias .xlsx ou um .zip da pasta (como o
+          Planilhas no modelo da BGRE, da Administradora ou da Sindicância, uma por prédio e trimestre: várias .xlsx ou um .zip da pasta (como o
           OneDrive baixa). Primeiro simule e confira; depois importe. As avaliações entram como enviadas à BGRE (passo 4 do checklist); o prédio e a
           administradora que não existirem são criados (na Sindicância, o prédio precisa existir). Nenhum arquivo fica guardado.
         </p>

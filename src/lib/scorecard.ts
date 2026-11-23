@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Score Cards da Brookfield: o da Administradora (planilha 2T26) e o da Sindicância (Rev. 3, fevereiro de 2024). Grupos,
+// Score Cards da BGRE: o da Administradora (planilha 2T26) e o da Sindicância (Rev. 3, fevereiro de 2024). Grupos,
 // pesos, itens, escala e o checklist do trimestre. Puro: serve ao servidor, às telas e à planilha.
 
 export type Fonte = "al" | "ev" | "df";
@@ -21,7 +21,7 @@ export const GRUPOS: Grupo[] = [
     nome: "2. Resultados operacionais da gerenciadora",
     peso: 0.35,
     itens: [
-      item("2.1", "Preenchimento e inserção de documentos nas plataformas (procedimento Brookfield)", "df"),
+      item("2.1", "Preenchimento e inserção de documentos nas plataformas (procedimento BGRE)", "df"),
       item("2.2.1", "Visitas de zeladoria", "al"),
       item("2.2.2", "Acompanhamento e manutenção da documentação legal", "df"),
       item("2.2.3", "Executar e controlar os itens de CAPEX", "al"),
@@ -37,8 +37,8 @@ export const GRUPOS: Grupo[] = [
     itens: [
       item("3.1", "Controle de inadimplência", "al"),
       item("3.2", "Plano de contas com justificativa das variações acima de 5%", "ev"),
-      item("3.3", "Compras dentro da normativa Brookfield", "df"),
-      item("3.4", "Contratações dentro da normativa Brookfield", "df"),
+      item("3.3", "Compras dentro da normativa BGRE", "df"),
+      item("3.4", "Contratações dentro da normativa BGRE", "df"),
     ],
   },
   {
@@ -68,7 +68,7 @@ export const GRUPOS_SINDICANCIA: Grupo[] = [
   {
     nome: "2. Processo de compras",
     peso: 0.3,
-    itens: [item("2.1", "Compras dentro do padrão acordado (normativa Brookfield)", "df")],
+    itens: [item("2.1", "Compras dentro do padrão acordado (normativa BGRE)", "df")],
   },
   {
     nome: "3. Gestão de processos",
@@ -80,7 +80,7 @@ export const GRUPOS_SINDICANCIA: Grupo[] = [
       item("3.4", "Avaliação da administradora do período", "df"),
       item("3.5", "Monitoramento da validade dos documentos e licenças", "df"),
       item("3.6", "Reunião mensal com a administradora, formalizada em ata", "df"),
-      item("3.7", "Acompanhamento da inserção de documentos nas plataformas (procedimento Brookfield)", "df"),
+      item("3.7", "Acompanhamento da inserção de documentos nas plataformas (procedimento BGRE)", "df"),
       item("3.8", "Acompanhamento dos itens de CAPEX", "df"),
     ],
   },
@@ -89,7 +89,7 @@ export const GRUPOS_SINDICANCIA: Grupo[] = [
     peso: 0.2,
     itens: [
       item("4.1", "Monitoramento da validade dos contratos", "df"),
-      item("4.2", "Contratações dentro do padrão acordado (normativa Brookfield)", "df"),
+      item("4.2", "Contratações dentro do padrão acordado (normativa BGRE)", "df"),
     ],
   },
 ];
