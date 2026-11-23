@@ -1,4 +1,4 @@
-// Modelo da Carteira BGRE (1ª entrega: cadastro e avaliação trimestral do Score Card da Brookfield).
+// Modelo da Carteira BGRE (1ª entrega: cadastro e avaliação trimestral do Score Card da BGRE).
 // Os itens do Score Card não são tabela: são fixos, em src/lib/scorecard.ts. NotaItem guarda só o código ("2.2.1").
 generator client {
   provider = "prisma-client-js"
@@ -132,7 +132,7 @@ model FlashPainel {
 }
 
 // Modelo oficial da planilha da BGRE (.xlsx), um por tipo de avaliação, enviado pela tela Cadastro (pedido do usuário de
-// 2026-10-27). Fica no banco porque o repositório é público e o arquivo é da Brookfield. Sem modelo, "Gerar planilha
+// 2026-10-27). Fica no banco porque o repositório é público e o arquivo é da BGRE. Sem modelo, "Gerar planilha
 // BGRE" usa o formato da DF.
 model ModeloPlanilha {
   tipo       TipoAvaliacao @id

@@ -8,7 +8,7 @@ import { MODELOS, type Tipo } from "./scorecard";
 import type { DadosPlanilha } from "./planilha";
 
 // Planilha no modelo oficial da BGRE (pedido do usuário de 2026-10-27: "exatamente o modelo da planilha deles").
-// O modelo (.xlsx) fica no banco, enviado pela tela Cadastro; o repositório é público e o arquivo é da Brookfield.
+// O modelo (.xlsx) fica no banco, enviado pela tela Cadastro; o repositório é público e o arquivo é da BGRE.
 // O preenchimento mexe só nas células de valor do XML da aba do Score Card: logo, estilos, fórmulas e as outras abas
 // ficam como vieram. Onde achar cada coisa é lido do próprio modelo, como na importação (rótulos, "#", "Peso").
 

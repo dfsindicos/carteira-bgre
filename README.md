@@ -1,8 +1,8 @@
 # Carteira BGRE · DF Síndicos
 
-Sistema da DF para a carteira BGRE (Brookfield), em `bgre.gestaodfsindicos.tech`. Só a DF usa: a BGRE não tem acesso e recebe a planilha gerada, e a administradora continua mandando as evidências por e-mail.
+Sistema da DF para a carteira BGRE (antiga Brookfield), em `bgre.gestaodfsindicos.tech`. Só a DF usa: a BGRE não tem acesso e recebe a planilha gerada, e a administradora continua mandando as evidências por e-mail.
 
-**1ª entrega (2026-10-24):** cadastro de administradoras e condomínios, avaliação trimestral do Score Card da Brookfield (16 itens, 4 grupos com pesos), painel da carteira e "Gerar planilha BGRE" (.xlsx). Próximas entregas no `CLAUDE.md`.
+**1ª entrega (2026-10-24):** cadastro de administradoras e condomínios, avaliação trimestral do Score Card da BGRE (16 itens, 4 grupos com pesos), painel da carteira e "Gerar planilha BGRE" (.xlsx). Próximas entregas no `CLAUDE.md`.
 
 ## Rodar localmente
 ```bash
